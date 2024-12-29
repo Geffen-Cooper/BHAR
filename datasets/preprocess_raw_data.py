@@ -9,9 +9,10 @@ import os
 import numpy as np
 import re
 from scipy.signal import resample
+import pickle
 
 
-def preprocess_DSADS(dataset_dir: str) -> None:
+def preprocess_DSADS(dataset_dir: str) -> dict:
     """ Loads the DSADS raw data and saves it in a standard format.
 
     https://archive.ics.uci.edu/dataset/256/daily+and+sports+activities
@@ -75,14 +76,14 @@ def preprocess_DSADS(dataset_dir: str) -> None:
             training_labels[subject_i].append(label_array)
         
     # now concatenate and save data
-    folder = f"{dataset_dir}/preprocessed_data"
-    os.mkdir(folder)
+    output_folder = os.path.join(dataset_dir,"preprocessed_data")
+    os.makedirs(output_folder,exist_ok=True)
     for subject_i in range(NUM_SUBJECTS):
         training_data[subject_i] = np.concatenate(training_data[subject_i])
         training_labels[subject_i] = np.concatenate(training_labels[subject_i])
 
-        np.save(f"{folder}/data_{subject_i+1}",training_data[subject_i])
-        np.save(f"{folder}/labels_{subject_i+1}",training_labels[subject_i])
+        np.save(os.path.join(output_folder,f"data_{subject_i+1}"),training_data[subject_i])
+        np.save(os.path.join(output_folder,f"labels_{subject_i+1}"),training_labels[subject_i])
 
 
     # ------------- dataset metadata -------------
@@ -124,12 +125,13 @@ def preprocess_DSADS(dataset_dir: str) -> None:
             }
     
     dataset_info = {
-        'sensor channel map': sensor_channel_map,
-        'list of subjects': [subject_i+1 for subject_i in range(NUM_SUBJECTS)],
-        'label map': label_map
+        'sensor_channel_map': sensor_channel_map,
+        'list_of_subjects': [subject_i+1 for subject_i in range(NUM_SUBJECTS)],
+        'label_map': label_map
     }
-
-    return dataset_info
+    
+    with open(os.path.join(output_folder,"metadata.pickle"), 'wb') as file:
+        pickle.dump(dataset_info, file)
 
 
 def preprocess_RWHAR():
@@ -140,3 +142,7 @@ def preprocess_PAMAP2():
 
 def preprocess_Opportunity():
     pass
+
+
+if __name__ == '__main__':
+    preprocess_DSADS(os.path.expanduser("~/Projects/data/dsads"))

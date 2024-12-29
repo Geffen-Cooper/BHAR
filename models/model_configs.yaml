@@ -1,0 +1,11 @@
+attend:
+  hidden_dim: 128
+  filter_num: 64
+  filter_size: 3
+  enc_is_bidirectional : False
+  enc_num_layers: 2
+  dropout: 0.5
+  dropout_rnn: 0.25
+  dropout_cls: 0.5
+  activation: "ReLU"
+  sa_div: 1
