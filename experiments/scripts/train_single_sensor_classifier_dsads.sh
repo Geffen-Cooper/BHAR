@@ -9,8 +9,9 @@ for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       for bp in "${bodyparts[@]}"; do
         python train_har_classifier.py \
-              --logging_prefix "classifier_${bp}" \
-              --model "$model" \
+              --eval \
+              --logging_prefix "classifier_window_8_acc_${bp}" \
+              --architecture "$architecture" \
               --dataset dsads \
               --seed "$seed" \
               --dataset_top_dir ~/Projects/data/dsads \
@@ -23,7 +24,7 @@ for seed in "${seeds[@]}"; do
               --overlap_frac 0.5 \
               --batch_size 128 \
               --lr 0.0001 \
-              --epochs 50 \
+              --epochs 25 \
               --ese 10 \
               --log_freq 200
               # 0: --- sitting

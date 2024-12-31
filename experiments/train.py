@@ -6,6 +6,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 from sklearn.metrics import f1_score
+from tqdm import tqdm
 
 from utils.setup_funcs import PROJECT_ROOT
 
@@ -139,7 +140,7 @@ def validate(model, val_loader, device, loss_fn):
         labels = []
         outputs = []
 
-        for batch_idx, (data,target) in enumerate(val_loader):
+        for batch_idx, (data,target) in enumerate(tqdm(val_loader)):
             # parse the batch and send to device
             data,target = data.to(device),target.to(device)
 

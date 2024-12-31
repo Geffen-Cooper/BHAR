@@ -194,8 +194,9 @@ if __name__ == "__main__":
     model = AttendDiscriminate(input_dim=num_channels,**config,num_class=len(args['activities'])).cuda()
     model.eval()
     with torch.no_grad():
-        z, logits = model(data_synthetic)
+        logits = model(data_synthetic)
         print(f"\t input: {data_synthetic.shape} {data_synthetic.dtype}")
-        print(f"\t z: {z.shape} {z.dtype}")
+        # print(f"\t z: {z.shape} {z.dtype}")
         print(f"\t logits: {logits.shape} {logits.dtype}")
 
+        print(f"Num Params:{sum(p.numel() for p in model.parameters())}")

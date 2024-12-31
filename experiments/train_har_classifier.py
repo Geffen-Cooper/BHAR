@@ -12,13 +12,14 @@ from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloade
 from datasets.preprocess_raw_data import preprocess_DSADS, preprocess_RWHAR, preprocess_PAMAP2
 from experiments.train import train, validate
 from utils.setup_funcs import PROJECT_ROOT, init_logger, init_seeds
+from utils.parse_results import get_results
 
 def get_args():
 	parser = argparse.ArgumentParser(
 			description="Dataset and model arguments for training HAR classifiers",
 			formatter_class=argparse.ArgumentDefaultsHelpFormatter
 		)
-
+	parser.add_argument("--eval", action="store_true", help="Get results of pretrained models")
 	parser.add_argument("--logging_prefix", default="logfile", type=str, help="name for this training session")
 	parser.add_argument(
 			"--architecture",
@@ -137,21 +138,29 @@ def train_LOOCV(**kwargs):
 
 	logger.info(f"Results: {results_table}")
 	# create parent directories if needed
+	kwargs['train_logname'] = os.path.join(logging_prefix,f"results_seed{seed}")
 	path_items = kwargs['train_logname'].split("/")
 	if  len(path_items) > 1:
 		Path(os.path.join(PROJECT_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
 
-	with open(os.path.join(PROJECT_ROOT,"saved_data/results",kwargs['train_logname'],"results.pickle"), 'wb') as file:
+	with open(os.path.join(PROJECT_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
 		pickle.dump(results_table, file)
 
 if __name__ == '__main__':
 
 	args = get_args()
+	eval_only = args.eval
 	args = vars(args)
 
 	# organize logs by dataset and architecture
 	args['logging_prefix'] = os.path.join(args['dataset'],args['architecture'],args['logging_prefix'])
 
-	train_LOOCV(**args)
+	if eval_only:
+		base_path = os.path.join(PROJECT_ROOT,"saved_data/results",args['logging_prefix'])
+		result_logs = [os.path.join(base_path, filename) for filename in os.listdir(base_path)]
+		mean, std = get_results(result_logs)
+		print(f"Mean: {round(mean*100,3)}, std: {round(std*100,3)}")
+	else:
+		train_LOOCV(**args)
 	
 	

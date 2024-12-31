@@ -144,8 +144,11 @@ class HARClassifierDataset(Dataset):
 		for subject in self.subjects:
 			self.raw_data[subject] = (self.raw_data[subject]-self.mean)/(self.std + 1e-5)
 
-		# create windows
-		stride = int(window_size*(1-overlap_frac))
+		# create windows, for test data we do dense prediction on every sample
+		if train or val:
+			stride = int(window_size*(1-overlap_frac))
+		else:
+			stride = 1
 		self.window_idxs = {subject: [] for subject in subjects}
 		self.window_labels = {subject: [] for subject in subjects}
 
@@ -287,6 +290,13 @@ def load_har_classifier_dataloaders(train_subjects, test_subjects, **kwargs):
 	test_loader = torch.utils.data.DataLoader(test_ds, batch_size=batch_size, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
 
 	return train_loader, val_loader, test_loader
+
+
+class SparseHARDataset():
+	def __init__(self,):
+		pass
+
+
 
 if __name__ == '__main__':
 	from experiments.train_har_classifier import get_args

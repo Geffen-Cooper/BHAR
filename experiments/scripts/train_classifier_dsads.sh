@@ -7,7 +7,7 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_classifier.py \
-            --logging_prefix classifier \
+            --logging_prefix classifier_window_125_acc \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -17,11 +17,11 @@ for seed in "${seeds[@]}"; do
             --body_parts torso right_arm left_arm right_leg left_leg \
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
-            --window_size 8 \
+            --window_size 125 \
             --overlap_frac 0.5 \
             --batch_size 128 \
             --lr 0.0001 \
-            --epochs 50 \
+            --epochs 25 \
             --ese 10 \
             --log_freq 200
             # 0: --- sitting
