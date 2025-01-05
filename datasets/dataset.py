@@ -52,13 +52,27 @@ class HARClassifierDataset(Dataset):
 
 	overlap_frac: float
 		sliding window overlap fraction for training data
+
+	normalize: bool
+		whether to normalize the data
 	
 	**kwargs:
 		makes it easier to pass in args without needing to filter
 	"""
 
-	def __init__(self, dataset_dir: str, subjects: list, sensors: list, body_parts:list , activities: list, \
-				 train: bool, val: bool, val_frac: float, window_size: int, overlap_frac: float, **kwargs):
+	def __init__(self, 
+			  dataset_dir: str, 
+			  subjects: list, 
+			  sensors: list, 
+			  body_parts:list , 
+			  activities: list,
+			  train: bool, 
+			  val: bool, 
+			  val_frac: float, 
+			  window_size: int, 
+			  overlap_frac: float, 
+			  normalize: bool = True,
+			  **kwargs):
 
 		if train:
 			print("========= Building Training Dataset =========")
@@ -68,9 +82,9 @@ class HARClassifierDataset(Dataset):
 			print("========= Building Test Dataset =========")
 		# load the metadata
 		with open(os.path.join(dataset_dir,'metadata.pickle'), 'rb') as handle:
-			dataset_info = pickle.load(handle)
-		self.sensor_channel_map = dataset_info['sensor_channel_map']
-		label_map = dataset_info['label_map']
+			self.dataset_info = pickle.load(handle)
+		self.sensor_channel_map = self.dataset_info['sensor_channel_map']
+		label_map = self.dataset_info['label_map']
 
 		# determine which channels to use (keep relative channel order of original data)
 		self.active_channels = []
@@ -141,8 +155,9 @@ class HARClassifierDataset(Dataset):
 			self.mean = np.load(os.path.join(dataset_dir,"training_data_mean.npy"))
 			self.std = np.load(os.path.join(dataset_dir,"training_data_std.npy"))
 		# apply training mean/std to train/val/test data
-		for subject in self.subjects:
-			self.raw_data[subject] = (self.raw_data[subject]-self.mean)/(self.std + 1e-5)
+		if normalize:
+			for subject in self.subjects:
+				self.raw_data[subject] = (self.raw_data[subject]-self.mean)/(self.std + 1e-5)
 
 		# create windows, for test data we do dense prediction on every sample
 		if train or val:
@@ -292,9 +307,54 @@ def load_har_classifier_dataloaders(train_subjects, test_subjects, **kwargs):
 	return train_loader, val_loader, test_loader
 
 
-class SparseHARDataset():
-	def __init__(self,):
-		pass
+def generate_activity_sequence(data,labels,min_duration,max_duration,sampling_rate):#, seed):
+	# np.random.seed(seed)
+	# first make contiguous segments
+	contig_labels = np.zeros_like(labels)
+	contig_data = np.zeros_like(data)
+	counter = 0
+	for act in np.unique(labels):
+		idxs = (labels == act).nonzero()[0]
+		contig_labels[counter:counter+len(idxs)] = labels[idxs]
+		contig_data[counter:counter+len(idxs),:] = data[idxs,:]
+		counter += len(idxs)
+
+	activity_idxs = {i : (contig_labels == i).nonzero()[0] for i in np.unique(contig_labels)}
+	duration = np.arange(min_duration,max_duration+1)
+
+	X = np.zeros_like(contig_data)
+	y = np.zeros_like(contig_labels)
+
+	activity_counters = np.zeros(len(np.unique(contig_labels))) # keeps track of where we are
+	remaining_activities = list(np.unique(contig_labels))
+	sample_counter = 0
+
+	while len(remaining_activities) > 0:
+		# randomly sample an activity
+		act = int(np.random.choice(np.array(remaining_activities), 1)[0])
+
+		# randomly sample a duration
+		dur = np.random.choice(duration, 1)[0]
+
+		# access this chunk of data and add to sequence
+		start = int(activity_counters[act])
+		end = int(start + dur*sampling_rate)
+
+		activity_counters[act] += (end-start)
+
+		# check if hit end
+		if end >= activity_idxs[act].shape[0]:
+			end = int(activity_idxs[act].shape[0])-1
+			remaining_activities.remove(act)
+
+		start = activity_idxs[act][start]
+		end = activity_idxs[act][end]
+
+		X[sample_counter:sample_counter+end-start,:] = contig_data[start:end,:]
+		y[sample_counter:sample_counter+end-start] = contig_labels[start:end]
+		sample_counter += (end-start)
+
+	return X,y
 
 
 

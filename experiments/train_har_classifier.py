@@ -25,7 +25,7 @@ def get_args():
 			"--architecture",
 			default="attend",
 			type=str,
-			choices=["attend", "tinyhar", "convlstm","simple"],
+			choices=["attend", "tinyhar", "convlstm"],
 			help="HAR architecture",
 		)
 	parser.add_argument(
@@ -112,12 +112,13 @@ def train_LOOCV(**kwargs):
 		model = model_builder(**kwargs)
 		kwargs['model'] = model
 		kwargs['loss_fn'] = nn.CrossEntropyLoss()
-		kwargs['optimizer'] = torch.optim.AdamW(model.parameters(),lr=kwargs['lr'])
-		kwargs['train_logname'] = f"{logging_prefix}/{train_subjects}_seed{seed}"
+		kwargs['optimizer'] = torch.optim.Adam(model.parameters(),lr=kwargs['lr'])
+		kwargs['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
 		kwargs['device'] = device
 		kwargs['train_loader'] = train_loader
 		kwargs['val_loader'] = val_loader
 		kwargs['logger'] = logger
+		# kwargs['lr_scheduler'] = None
 		kwargs['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(kwargs['optimizer'],kwargs['epochs'])
 
 		# load the model if already trained

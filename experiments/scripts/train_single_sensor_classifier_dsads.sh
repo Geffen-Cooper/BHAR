@@ -2,7 +2,7 @@
 cd ..
 
 seeds=(0 1 2)
-architectures=("attend")
+architectures=("attend_single")
 bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
 
 for seed in "${seeds[@]}"; do
@@ -22,7 +22,7 @@ for seed in "${seeds[@]}"; do
               --val_frac 0.1 \
               --window_size 8 \
               --overlap_frac 0.5 \
-              --batch_size 128 \
+              --batch_size 256 \
               --lr 0.0001 \
               --epochs 25 \
               --ese 10 \

@@ -121,6 +121,10 @@ def train(model,loss_fn,optimizer,train_logname,epochs,ese,device,
 
         if lr_scheduler is not None:
             lr_scheduler.step()
+        else:
+            if num_epochs_worse == 7:
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] *= 0.9
 
     logger.info(f"Best val f1: {best_val_f1}")
     # model.load_state_dict(torch.load(checkpoint_path)['model_state_dict'])
