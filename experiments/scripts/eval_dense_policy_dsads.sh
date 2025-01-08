@@ -7,9 +7,9 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
-            --checkpoint_prefix classifier_window_125_acc \
+            --checkpoint_prefix classifier_window_8_acc \
             --logging_prefix policy_dense_eval \
-            --policy unconstrained_1 \
+            --policy unconstrained_5 \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \

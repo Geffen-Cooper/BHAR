@@ -368,7 +368,6 @@ if __name__ == '__main__':
 
 	# preprocess
 	dataset_dir = os.path.expanduser(args['dataset_dir'])
-	# preprocess_DSADS(dataset_dir)
 
 	# visualize preprocessed data
 	args['dataset_dir'] = os.path.join(dataset_dir,"preprocessed_data")

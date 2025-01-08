@@ -7,6 +7,7 @@ import os
 import torch
 
 from models.Attend import AttendDiscriminate
+from models.ConvLstm import DeepConvLSTM
 from utils.setup_funcs import PROJECT_ROOT
 from models.sparse_wrappers import DenseModel, MultiSensor
 
@@ -35,6 +36,10 @@ def model_builder(**kwargs):
     if architecture == 'attend':
         config = yaml.load(config_file, Loader=yaml.FullLoader)["attend"]
         model = AttendDiscriminate(input_dim=num_channels,**config,num_class=num_classes)
+        return model
+    elif architecture == 'convlstm':
+        config = yaml.load(config_file, Loader=yaml.FullLoader)["convlstm"]
+        model = DeepConvLSTM(input_shape=(1,3,kwargs['window_size'],num_channels),nb_classes=num_classes,**config)
         return model
 
 

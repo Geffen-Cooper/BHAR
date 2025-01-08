@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from energy_harvesting.energy_harvest import EnergyHarvester
 
@@ -86,6 +87,8 @@ class EnergyHarvestingSensor():
 		# provide a small margin to avoid turning off right after sending
 		self.MARGIN = 5*self.LEAKAGE_PER_SAMPLE
 
+		self.num_packets_sent = 0
+
 
 	def send_packet(self, k):
 		""" Alters the harvester state accordingly when want to send a packet.
@@ -105,7 +108,7 @@ class EnergyHarvestingSensor():
 
 		"""
 		# Check if have sufficient energy to send
-		if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx > self.tau):
+		if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau):
 			# we are within one packet of the end of the data
 			if k + self.packet_size + 1 >= len(self.e_trace):
 				self.valid[k+1:] = 1
@@ -120,6 +123,7 @@ class EnergyHarvestingSensor():
 				
 				k += (self.packet_size+1)
 			self.last_sent_idx = k
+			self.num_packets_sent += 1
 		else: # otherwise, move forward one time step
 			k += 1
 
@@ -136,10 +140,16 @@ class EnergyHarvestingSensor():
 		rolled_data[0] = np.nan # in case we end halfway through a valid packet
 		nan_to_num_transition_indices = np.where(~np.isnan(og_data) & np.isnan(rolled_data))[0] # arrival idxs
 		num_to_nan_transition_indices = np.where(np.isnan(og_data) & ~np.isnan(rolled_data))[0] # ending idxs
-
+		if len(num_to_nan_transition_indices) < len(nan_to_num_transition_indices):
+			nan_to_num_transition_indices = nan_to_num_transition_indices[:-1]
 		packet_idxs = np.stack([nan_to_num_transition_indices, num_to_nan_transition_indices]).T
 
 		self.valid = np.nan_to_num(self.valid, nan=0)
+		# plt.plot(self.e_trace[17000:18000])
+		# plt.plot(self.e_trace[15000:18000])
+		# plt.axhline(50e-6,c='k')
+		# plt.savefig(f"test_{np.random.randint(1000)}.png")
+		# plt.close()
 		return packet_idxs
 		
 
@@ -166,8 +176,10 @@ class EnergyHarvestingSensor():
 			self.tau = 0
 			
 		elif "conservative" in policy:
-			args = policy.split("_")
-			self.alpha, self.tau = float(args[0]), float(args[1])
+			# args = policy.split("_")
+			# self.alpha, self.tau = float(args[0]), float(args[1])
+			self.alpha = (50e-6)/10
+			self.tau = 100
 
 		# -------------- start policy --------------
 
@@ -182,6 +194,7 @@ class EnergyHarvestingSensor():
 			elif self.e_trace[k] < 0: # device died
 				self.e_trace[k] = 0
 				self.last_sent_idx = k # reset parameter
+				self.num_packets_sent = 0
 
 			# this is a special case
 			if "unconstrained" in policy:

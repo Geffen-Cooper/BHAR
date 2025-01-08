@@ -79,6 +79,8 @@ class SparseHarDataset(Dataset):
         active_idxs = []
         passive_idxs = []
 
+        self.sorted_arrival_times = np.stack(self.sorted_time_stamps,axis=0)[:,1]
+
         # get the activity transition points (include starting point idx 0)
         activity_transition_idxs = np.concatenate([np.array([0]),np.where(self.original_labels[:-1] != self.original_labels[1:])[0] + 1])
 

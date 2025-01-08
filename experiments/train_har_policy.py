@@ -7,6 +7,7 @@ import torch.nn as nn
 import pickle
 from pathlib import Path
 from tqdm import tqdm
+from sklearn.metrics import f1_score
 
 from models.model_builder import model_builder, sparse_model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders, generate_activity_sequence
@@ -137,7 +138,6 @@ def train_LOOCV(**kwargs):
 		test_ds = HARClassifierDataset(**kwargs,train=False,val=False)
 
 		# merge data across subjects for policy training
-		#TODO: do not normalize data before sparsifying
 		# apply mean and std after
 		train_data = np.concatenate(list(train_ds.raw_data.values()))
 		train_labels = np.concatenate(list(train_ds.raw_labels.values()))
@@ -160,6 +160,8 @@ def train_LOOCV(**kwargs):
 		test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,25)
 
 		# normalize data used for classification, unormalized used for energy harvesting
+		normalized_train_data_sequence = (train_data_sequence-train_ds.mean)/(train_ds.std + 1e-5)
+		normalized_val_data_sequence = (val_data_sequence-train_ds.mean)/(train_ds.std + 1e-5)
 		normalized_test_data_sequence = (test_data_sequence-train_ds.mean)/(train_ds.std + 1e-5)
 
 		# prepare environment
@@ -180,13 +182,18 @@ def train_LOOCV(**kwargs):
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
 			packet_idxs[bp] = ehs.sparsify_data(kwargs['policy'], test_data_sequence[:,bp_channels])
-			
+			# print(len(packet_idxs[bp]))
+		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
+		# active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
+		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
+		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# next load the pretrained classifier
 		kwargs['checkpoint_postfix'] = f"{train_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)
 
+		# print((test_label_sequence==0).nonzero()[0])
 
 		import time
 		# next classify sparse data
@@ -222,7 +229,9 @@ def train_LOOCV(**kwargs):
 		preds[last_packet_idx:] = last_pred
 
 		acc = (preds == test_label_sequence).mean()
+		f1 = f1_score(test_label_sequence,preds,average='macro')
 		print(f"Accuracy: {acc}")
+		print(f"F1: {f1}")
 		exit()
 
 
