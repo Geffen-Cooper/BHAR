@@ -1,7 +1,7 @@
 #!/bin/bash
 cd ..
 
-seeds=(2)
+seeds=(0 1 2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
@@ -9,15 +9,15 @@ for seed in "${seeds[@]}"; do
       python train_har_policy.py \
             --checkpoint_prefix classifier_window_8_acc \
             --logging_prefix policy_sparse_eval \
-            --policy conservative \
+            --policy opportunistic \
             --architecture "$architecture" \
-            --dataset dsads \
+            --dataset rwhar \
             --seed "$seed" \
-            --dataset_top_dir ~/Projects/data/dsads \
-            --subjects 1 2 3 4 5 6 7 8 \
+            --dataset_top_dir ~/Projects/data/rwhar \
+            --subjects 1 4 5 7 9 10 11 12 13 14 15 \
             --sensors acc \
-            --body_parts torso right_arm left_arm right_leg left_leg \
-            --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
+            --body_parts chest forearm head shin thigh upperarm waist \
+            --activities 0 1 2 3 4 5 6 7 \
             --val_frac 0.1 \
             --window_size 8 \
             --overlap_frac 0.5 \

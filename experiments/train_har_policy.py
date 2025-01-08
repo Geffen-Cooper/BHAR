@@ -190,12 +190,10 @@ def train_LOOCV(**kwargs):
 		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# next load the pretrained classifier
-		kwargs['checkpoint_postfix'] = f"{train_subjects}_seed{seed}.pth"
+		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)
+		sparse_model.eval()
 
-		# print((test_label_sequence==0).nonzero()[0])
-
-		import time
 		# next classify sparse data
 		preds = np.zeros(len(test_label_sequence))
 		rand_initial_pred = np.random.randint(len(np.unique(test_label_sequence)))
@@ -204,10 +202,7 @@ def train_LOOCV(**kwargs):
 		current_packet_idx = 0
 		times = np.zeros(3)
 		for packet_i in tqdm(range(len(sparse_har_dataset))):
-			c1 = time.time()
 			packets = sparse_har_dataset[packet_i]
-			c2 = time.time()
-			times[0] += c2-c1
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
 					at = packet['arrival_time']
@@ -216,36 +211,20 @@ def train_LOOCV(**kwargs):
 			current_packet_idx = at
 			preds[last_packet_idx:current_packet_idx] = last_pred
 			last_packet_idx = current_packet_idx
-			c3 = time.time()
-			times[1] += c3-c2
 
 			# get new prediction
-			last_pred = torch.argmax(sparse_model(packets)).item()
-			c4 = time.time()
-			times[2] += c4-c3
-			# print(times)
-		# exit()
+			with torch.no_grad():
+				last_pred = torch.argmax(sparse_model(packets)).item()
+		
 		# extend until end
 		preds[last_packet_idx:] = last_pred
 
-		acc = (preds == test_label_sequence).mean()
-		f1 = f1_score(test_label_sequence,preds,average='macro')
-		print(f"Accuracy: {acc}")
-		print(f"F1: {f1}")
-		exit()
-
-
-		#----------------------
-
+		test_acc = (preds == test_label_sequence).mean()
+		test_f1 = f1_score(test_label_sequence,preds,average='macro')
 		
-		
-		
-		# # load the one with the best validation accuracy and evaluate on test set
-		# model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
-		# test_acc,test_f1,test_loss = validate(model, test_loader, device, kwargs['loss_fn'])
-		# logger.info(f"Test F1: {test_f1}, Test Acc: {test_acc}")
-		# logger.info("==========================================\n\n")
-		# results_table[subject] = (test_f1, test_acc)
+		logger.info(f"Test F1: {test_f1}, Test Acc: {test_acc}")
+		logger.info("==========================================\n\n")
+		results_table[subject] = (test_f1, test_acc)
 
 
 	logger.info(f"Results: {results_table}")
