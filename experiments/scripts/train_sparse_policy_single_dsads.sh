@@ -16,7 +16,7 @@ for seed in "${seeds[@]}"; do
             --dataset_top_dir ~/Projects/data/dsads \
             --subjects 1 2 3 4 5 6 7 8 \
             --sensors acc \
-            --body_parts right_leg \
+            --body_parts right_leg left_arm \
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
             --window_size 8 \
@@ -27,8 +27,8 @@ for seed in "${seeds[@]}"; do
             --max_energy 200e-6 \
             --model_type sparse_asychronous_baseline \
             --batch_size 16 \
-            --lr 1e-6 5 \
-            --epochs 50 \
+            --lr 1e-6 50 \
+            --epochs 5 \
             --val_every_epochs 1 \
             --param_init_vals 0. 0. \
             --param_min_vals 0. 0. \

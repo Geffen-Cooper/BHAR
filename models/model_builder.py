@@ -9,7 +9,7 @@ import torch
 from models.Attend import AttendDiscriminate
 from models.ConvLstm import DeepConvLSTM
 from utils.setup_funcs import PROJECT_ROOT
-from models.sparse_wrappers import DenseModel, MultiSensor
+from models.sparse_wrappers import DenseModel, MultiSensor, TemporalContextModel
 
 def model_builder(**kwargs):
     """ Initializes the specified architecture
@@ -28,14 +28,15 @@ def model_builder(**kwargs):
 	"""
 
     architecture = kwargs['architecture']
-    num_channels = num_channels = 3*len(kwargs['body_parts'])*len(kwargs['sensors'])
+    num_channels = 3*len(kwargs['body_parts'])*len(kwargs['sensors'])
     num_classes = len(kwargs['activities'])
+    t_context = (len(kwargs['body_parts']),kwargs['window_size'])
 
     config_file = open(os.path.join(PROJECT_ROOT,'models','model_configs.yaml'), mode='r')
 
     if architecture == 'attend':
         config = yaml.load(config_file, Loader=yaml.FullLoader)["attend"]
-        model = AttendDiscriminate(input_dim=num_channels,**config,num_class=num_classes)
+        model = AttendDiscriminate(input_dim=num_channels,**config,num_class=num_classes,t_context=t_context)
         return model
     elif architecture == 'convlstm':
         config = yaml.load(config_file, Loader=yaml.FullLoader)["convlstm"]
@@ -65,4 +66,8 @@ def sparse_model_builder(**kwargs):
             models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
         return MultiSensor(models)
     elif model_type == 'sparse_asychronous_contextualized':
-        pass
+        # this is standard HAR model
+        model = model_builder(**kwargs)
+        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
+        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        return Tem(model)

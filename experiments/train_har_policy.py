@@ -75,7 +75,7 @@ def get_args():
 				default="dense_synchronous_baseline",
 				type=str,
 				choices=["dense_synchronous_baseline",
-			             "sparse_asychronous_baseline", 
+						 "sparse_asychronous_baseline", 
 						 "sparse_asychronous_contextualized"],
 				help="Sparse Model Type",
 			)	
@@ -183,39 +183,83 @@ def train_LOOCV(**kwargs):
 		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)
 
-		# next learn the policy (train, val)
+		policy = kwargs['policy']
+
+		# ============== next learn the policy (train, val) if we want to
 		if 'conservative' in kwargs['policy']:
-			params_bounds = [[x, y] for x, y in zip(kwargs['param_min_vals'], kwargs['param_max_vals'])]
-			optimizer_cfg = {
-				'optimizer': PatternSearch, # PatternSearch, signSGD, SGD
-				'init_params': kwargs['param_init_vals'],
-				'lr': kwargs['lr'],
-				'params_bounds': params_bounds,
-			}
+			logger.info("Train policy ===========")
+			# if the policy is already trained, just load parameters
+			ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])+'.pkl'
+			if os.path.exists(ckpt_path):
+				logger.info("Policy Already Trained")
+				with open(ckpt_path, 'rb') as file:
+					policy = pickle.load(file)
+			else: # otherwise, train the policy
+				# create a checkpoint, init sensor policies to opportunistic
+				policy = {bp: [0.,0.] for bp in kwargs['body_parts']}
+				with open(ckpt_path, 'wb') as file:
+					pickle.dump(policy, file)
 
-			train_cfg = {
-				'batch_size': kwargs['batch_size'],
-				'epochs': kwargs['epochs'],
-				'val_every_epochs': kwargs['val_every_epochs'],
-				'train_seg_duration':200*25	
-			}
-			# need to fix logging for trainer (where are params saved)
-			train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
-							  train_label_sequence, val_data_sequence, normalized_val_data_sequence,
-							  val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
-			zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger)
-			zo_trainer.train()
-			
+				# optimize sensors iteratively
+				for bp in kwargs['body_parts']:
+					params_bounds = [[x, y] for x, y in zip(kwargs['param_min_vals'], kwargs['param_max_vals'])]
+					optimizer_cfg = {
+						'optimizer': PatternSearch, # PatternSearch, signSGD, SGD
+						'init_params': kwargs['param_init_vals'],
+						'lr': kwargs['lr'],
+						'params_bounds': params_bounds,
+					}
+
+					train_cfg = {
+						'batch_size': kwargs['batch_size'],
+						'epochs': kwargs['epochs'],
+						'val_every_epochs': kwargs['val_every_epochs'],
+						'train_seg_duration':200*25	
+					}
+					
+					train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
+									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
+									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
+					
+					# load the current policy so we can get the frozen params
+					with open(ckpt_path, 'rb') as file:
+						frozen_policy = pickle.load(file)
+					frozen_policy.pop(bp)
+
+					logger.info(f"Training: {bp}, frozen params: {frozen_policy}")
+
+					# train the policy for the given bp with others frozen
+					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,frozen_policy,bp)
+					zo_trainer.train()
+
+				# load trained policy
+				with open(ckpt_path, 'rb') as file:
+					policy = pickle.load(file)
+		else:
+			# opportunistic or dense for all sensors
+			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
+
+		# ============= after getting policy, finetune model if needed
+		
+		# finetune the model if contextualized specified, otherwise load the other models
+		# if the checkpoint already exists then just load it
+
+		# get train, val, test loaders
+			# apply the trained policy to get sparse hard dataset objects
+		# load contextualized model
+		# put in standard training loop using existing train function
+
+
 		exit()
-		# policy = train_policy(ehs, train_data_sequence, train_label_sequence, val_data_sequence, val_label_sequence)
+			
 
-		# next apply the policy (test)
+		# test the learned policy and/or contextualized model
 		packet_idxs = {}
 		per_bp_data = {}
 		for bp in kwargs['body_parts']:
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
-			packet_idxs[bp] = ehs.sparsify_data(kwargs['policy'], test_data_sequence[:,bp_channels])
+			packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
 			# print(len(packet_idxs[bp]))
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)

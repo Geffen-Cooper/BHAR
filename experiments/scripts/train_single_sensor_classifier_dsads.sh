@@ -2,14 +2,13 @@
 cd ..
 
 seeds=(0 1 2)
-architectures=("attend_single")
+architectures=("attend")
 bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       for bp in "${bodyparts[@]}"; do
         python train_har_classifier.py \
-              --eval \
               --logging_prefix "classifier_window_8_acc_${bp}" \
               --architecture "$architecture" \
               --dataset dsads \

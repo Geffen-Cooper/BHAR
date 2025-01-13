@@ -66,18 +66,16 @@ class PolicyTrain():
 
 		return data_seg, data_seg_n, label_seg
 
-def reward(latest_params,per_bp_data,per_body_part_data_normalized,label_sequence,harvesting_sensor,reward_type,classifier,train_mode):
-	per_bp_parameters = {}
-	num_bp = len(per_bp_data)
-	bp_i = 0
-	for bp in per_bp_data.keys():
-		num_params = int(len(latest_params) / num_bp)
-		per_bp_parameters[bp] = latest_params[bp_i*num_bp:bp_i*num_bp+num_params]
+def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_normalized,label_sequence,harvesting_sensor,reward_type,classifier,train_mode):
 
 	packet_idxs = {}
 	# apply the policy for each sensor using original data
 	for bp in per_bp_data.keys():
-		policy = f"conservative_{per_bp_parameters[bp][0]}_{per_bp_parameters[bp][1]}"
+		# set the policy for frozen sensors
+		if bp in frozen_sensor_params.keys():
+			policy = f"conservative_{frozen_sensor_params[bp][0]}_{frozen_sensor_params[bp][1]}"
+		else: # policy for sensor we are optimizing
+			policy = f"conservative_{latest_params[0]}_{latest_params[1]}"
 		packet_idxs[bp] = harvesting_sensor.sparsify_data(policy, per_bp_data[bp])
 
 	# format sparsified data (normalized)
@@ -96,7 +94,7 @@ def reward(latest_params,per_bp_data,per_body_part_data_normalized,label_sequenc
 		last_packet_idx = 0
 		current_packet_idx = 0
 		for packet_i in tqdm(range(len(sparse_har_dataset))):
-			packets = sparse_har_dataset[packet_i]
+			packets,_ = sparse_har_dataset[packet_i]
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
 					at = packet['arrival_time']

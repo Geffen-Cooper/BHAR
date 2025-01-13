@@ -7,7 +7,7 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_classifier.py \
-            --logging_prefix classifier_window_125_acc_f5 \
+            --logging_prefix classifier_window_25_acc \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -21,7 +21,7 @@ for seed in "${seeds[@]}"; do
             --overlap_frac 0.5 \
             --batch_size 256 \
             --lr 0.0001 \
-            --epochs 100 \
+            --epochs 25 \
             --ese 10 \
             --log_freq 200
             # 0: --- sitting

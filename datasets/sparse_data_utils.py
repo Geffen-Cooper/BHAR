@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 import time
 
@@ -151,7 +151,40 @@ class SparseHarDataset(Dataset):
                                     'age': -1,
                                     'arrival_time': -1}
         # print(time.time()-start_time)
-        return packet_data
+        label = torch.tensor(self.original_labels[reference_at]).long()
+
+        return packet_data, label
     
     def __len__(self):
         return len(self.unique_packet_timestamps)
+    
+
+def collate_sparse_sensor_data(batch):
+    print(batch)
+    exit()
+    packets, labels = zip(*batch)
+
+    collated_packets = {}
+    bps = packets[0].keys()
+    for bp in bps:
+        collated_packets[bp] = {}
+        for key in batch[0][bp]:
+            collated_packets[bp][key] = np.stack([item[bp][key] for item in batch], axis=0)
+
+    labels = np.array([item[1] for item in batch])
+    
+    collated_packets, labels
+
+if __name__ == '__main__':
+    original_data = {f"bp{i}" : np.zeros((100,3)) for i in range(2)}
+    original_labels = np.zeros(100)
+    packet_timestamps = {f"bp0" : np.array([[0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14],[30,38]]),
+                         f"bp1" : np.array([[0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14],[30,38]])+30}
+
+    sd = SparseHarDataset(original_data,original_labels,packet_timestamps)
+    
+    dl = DataLoader(sd,batch_size=2)
+    x = next(iter(dl))
+    print(x)
+    print(x[0]['bp0']['data'].shape,x[0]['bp0']['age'].shape)
+    print(x[0]['bp1']['data'].shape,x[0]['bp1']['age'].shape)

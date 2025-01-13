@@ -74,8 +74,11 @@ class FeatureExtractor(nn.Module):
         dropout_rnn,
         activation,
         sa_div,
+        t_context
     ):
         super(FeatureExtractor, self).__init__()
+
+        self.input_dim = input_dim
 
         self.conv1 = nn.Conv2d(1, filter_num, (filter_size, 1),padding=(1,0))
         self.conv2 = nn.Conv2d(filter_num, filter_num, (filter_size, 1),padding=(1,0))
@@ -96,13 +99,21 @@ class FeatureExtractor(nn.Module):
         self.sa = SelfAttention(filter_num, sa_div)
         # print(filter_num,input_dim)
 
-    def forward(self, x):
+        self.num_sensors, self.window_size = t_context
+        self.t_context_layer = nn.Linear(self.num_sensors,self.num_sensors*3*int(self.window_size-2))
+
+    def forward(self, x, ages=None):
         x = x.unsqueeze(1)
         x = self.activation(self.conv1(x))
         x = self.activation(self.conv2(x))
         x = self.activation(self.conv3(x))
         x = self.activation(self.conv4(x))
         # print(x.shape)
+
+        if ages is not None:
+            temporal_context = self.t_context_layer(ages)
+            temporal_context = temporal_context.view(x.shape[0],self.window_size-2,-1).unsqueeze(1).repeat(1,x.shape[1],1,1)
+            x = x + temporal_context
 
         # apply self-attention on each temporal dimension (along sensor and feature dimensions)
         refined = torch.cat(
@@ -144,7 +155,8 @@ class AttendDiscriminate(nn.Module):
         dropout_cls,
         activation,
         sa_div,
-        num_class
+        num_class,
+        t_context = None
     ):
         super(AttendDiscriminate, self).__init__()
 
@@ -160,14 +172,15 @@ class AttendDiscriminate(nn.Module):
             dropout_rnn,
             activation,
             sa_div,
+            t_context
         )
 
         self.dropout = nn.Dropout(dropout_cls)
         self.classifier = Classifier(hidden_dim, num_class)
 
 
-    def forward(self, x):
-        feature = self.fe(x)
+    def forward(self, x, ages=None):
+        feature = self.fe(x, ages)
         z = feature.div(
             torch.norm(feature, p=2, dim=1, keepdim=True).expand_as(feature)
         )
@@ -189,12 +202,13 @@ if __name__ == "__main__":
     args = vars(args)
     num_channels = 3*len(args['body_parts'])*len(args['sensors'])
     data_synthetic = torch.randn((args['batch_size'], args['window_size'], num_channels)).cuda()
+    ages_synthetic = torch.randn((args['batch_size'], len(args['body_parts']))).cuda()
 
     # create HAR model
-    model = AttendDiscriminate(input_dim=num_channels,**config,num_class=len(args['activities'])).cuda()
+    model = AttendDiscriminate(input_dim=num_channels,**config,num_class=len(args['activities']),t_context=(len(args['body_parts']),args['window_size'])).cuda()
     model.eval()
     with torch.no_grad():
-        logits = model(data_synthetic)
+        logits = model(data_synthetic, ages_synthetic)
         print(f"\t input: {data_synthetic.shape} {data_synthetic.dtype}")
         # print(f"\t z: {z.shape} {z.dtype}")
         print(f"\t logits: {logits.shape} {logits.dtype}")
