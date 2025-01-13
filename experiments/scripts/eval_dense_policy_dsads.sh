@@ -9,7 +9,7 @@ for seed in "${seeds[@]}"; do
       python train_har_policy.py \
             --checkpoint_prefix classifier_window_8_acc \
             --logging_prefix policy_dense_eval \
-            --policy unconstrained_5 \
+            --policy unconstrained_8 \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -19,7 +19,7 @@ for seed in "${seeds[@]}"; do
             --body_parts torso right_arm left_arm right_leg left_leg \
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
-            --window_size 125 \
+            --window_size 8 \
             --overlap_frac 0.5 \
             --harvesting_sensor_window_size 8 \
             --leakage 6.6e-6 \

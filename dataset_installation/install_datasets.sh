@@ -12,6 +12,7 @@ rm daily+and+sports+activities.zip
 wget https://archive.ics.uci.edu/static/public/231/pamap2+physical+activity+monitoring.zip
 unzip pamap2+physical+activity+monitoring.zip -d pamap2
 rm pamap2+physical+activity+monitoring.zip
+./unload_pamap2
 
 # install Opportunity
 wget https://archive.ics.uci.edu/static/public/226/opportunity+activity+recognition.zip

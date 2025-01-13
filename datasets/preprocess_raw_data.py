@@ -561,4 +561,4 @@ def preprocess_Opportunity():
 if __name__ == '__main__':
 	# preprocess_DSADS(os.path.expanduser("~/Projects/data/dsads"))
 	# preprocess_RWHAR(os.path.expanduser("~/Projects/data/rwhar"))
-	preprocess_PAMAP2(os.path.expanduser("~/Projects/data/pamap2/pamap2/PAMAP2_Dataset/Protocol"))
+	preprocess_PAMAP2(os.path.expanduser("~/Projects/data/pamap2/"))

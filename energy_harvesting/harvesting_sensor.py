@@ -177,7 +177,7 @@ class EnergyHarvestingSensor():
 			
 		elif "conservative" in policy:
 			args = policy.split("_")
-			self.alpha, self.tau = float(args[0]), float(args[1])
+			self.alpha, self.tau = float(args[1]), float(args[2])
 			# self.alpha = (50e-6)/10
 			# self.tau = 100
 

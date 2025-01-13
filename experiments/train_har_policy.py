@@ -18,6 +18,9 @@ from utils.parse_results import get_results
 from energy_harvesting.energy_harvest import EnergyHarvester
 from energy_harvesting.harvesting_sensor import EnergyHarvestingSensor
 from datasets.sparse_data_utils import SparseHarDataset
+from experiments.zero_order_algos import signSGD, SGD, PatternSearch
+from experiments.ZOTrainer_modified import ZOTrainer
+from experiments.sensor_reward import PolicyTrain, reward
 
 def get_args():
 	parser = argparse.ArgumentParser(
@@ -76,11 +79,15 @@ def get_args():
 						 "sparse_asychronous_contextualized"],
 				help="Sparse Model Type",
 			)	
-	# parser.add_argument("--batch_size", default=128, type=int, help="training batch size")
-	# parser.add_argument("--lr", default=1e-4, type=float, help="learning rate")
-	# parser.add_argument("--epochs", default=50, type=int, help="training epochs")
-	# parser.add_argument("--ese", default=10, type=int, help="early stopping epochs")
-	# parser.add_argument("--log_freq", default=200, type=int, help="after how many batches to log")
+	
+	# zero order arguments
+	parser.add_argument("--batch_size", default=16, type=int, help="training batch size")
+	parser.add_argument("--lr", default=[1e-6,5], nargs='+', type=float, help="learning rate for each policy parameter")
+	parser.add_argument("--epochs", default=5, type=int, help="training epochs")
+	parser.add_argument("--val_every_epochs", default=1, type=int, help="after how many batches to log")
+	parser.add_argument("--param_init_vals", default=[0.0,0.0], nargs='+',type=float, help="init value for each parameter")
+	parser.add_argument("--param_min_vals", default=[0.0,0.0], nargs='+',type=float, help="min parameter bound")
+	parser.add_argument("--param_max_vals", default=[1.5e-4,10000], nargs='+',type=float, help="max parameter bound")
 
 
 	args = parser.parse_args()
@@ -118,6 +125,7 @@ def train_LOOCV(**kwargs):
 		test_subjects = [subjects[subject_i]]
 
 		logger.info(f"Train Group: {train_subjects} --> Test Group: {test_subjects}")
+		kwargs['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
 
 		# create the dataset
 		preprocessed_path = os.path.join(kwargs['dataset_top_dir'], "preprocessed_data")
@@ -172,7 +180,33 @@ def train_LOOCV(**kwargs):
 							   kwargs['sampling_frequency'],
 							   kwargs['max_energy'])
 
+		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+		sparse_model = sparse_model_builder(**kwargs)
+
 		# next learn the policy (train, val)
+		if 'conservative' in kwargs['policy']:
+			params_bounds = [[x, y] for x, y in zip(kwargs['param_min_vals'], kwargs['param_max_vals'])]
+			optimizer_cfg = {
+				'optimizer': PatternSearch, # PatternSearch, signSGD, SGD
+				'init_params': kwargs['param_init_vals'],
+				'lr': kwargs['lr'],
+				'params_bounds': params_bounds,
+			}
+
+			train_cfg = {
+				'batch_size': kwargs['batch_size'],
+				'epochs': kwargs['epochs'],
+				'val_every_epochs': kwargs['val_every_epochs'],
+				'train_seg_duration':200*25	
+			}
+			# need to fix logging for trainer (where are params saved)
+			train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
+							  train_label_sequence, val_data_sequence, normalized_val_data_sequence,
+							  val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
+			zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger)
+			zo_trainer.train()
+			
+		exit()
 		# policy = train_policy(ehs, train_data_sequence, train_label_sequence, val_data_sequence, val_label_sequence)
 
 		# next apply the policy (test)
@@ -186,9 +220,10 @@ def train_LOOCV(**kwargs):
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
-		# active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
-		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
-		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
+		active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
+		print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
+		print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
+
 		# next load the pretrained classifier
 		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)

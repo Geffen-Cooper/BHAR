@@ -9,7 +9,7 @@ for seed in "${seeds[@]}"; do
       python train_har_policy.py \
             --checkpoint_prefix classifier_window_8 \
             --logging_prefix policy_dense_eval \
-            --policy unconstrained_5 \
+            --policy unconstrained_8 \
             --architecture "$architecture" \
             --dataset rwhar \
             --seed "$seed" \
