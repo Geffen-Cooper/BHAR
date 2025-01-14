@@ -241,6 +241,7 @@ def train_LOOCV(**kwargs):
 			# opportunistic or dense for all sensors
 			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
 
+
 		# ============= after getting policy, finetune model if needed
 		
 		# finetune the model if contextualized specified, otherwise load the other models
@@ -250,9 +251,6 @@ def train_LOOCV(**kwargs):
 			# apply the trained policy to get sparse hard dataset objects
 		# load contextualized model
 		# put in standard training loop using existing train function
-
-
-		exit()
 			
 
 		# test the learned policy and/or contextualized model
@@ -262,7 +260,6 @@ def train_LOOCV(**kwargs):
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
 			packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
-			# print(len(packet_idxs[bp]))
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
@@ -281,7 +278,6 @@ def train_LOOCV(**kwargs):
 		last_pred = rand_initial_pred
 		last_packet_idx = 0
 		current_packet_idx = 0
-		times = np.zeros(3)
 		for packet_i in tqdm(range(len(sparse_har_dataset))):
 			packets = sparse_har_dataset[packet_i]
 			for bp,packet in packets.items():
