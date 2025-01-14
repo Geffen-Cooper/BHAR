@@ -260,7 +260,10 @@ def train_LOOCV(**kwargs):
 		for bp in kwargs['body_parts']:
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
-			packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
+			if 'conservative' in kwargs['policy']:
+				packet_idxs[bp] = ehs.sparsify_data(f"conservative_{policy[bp][0]}_{policy[bp][1]}", test_data_sequence[:,bp_channels])
+			else:
+				packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 

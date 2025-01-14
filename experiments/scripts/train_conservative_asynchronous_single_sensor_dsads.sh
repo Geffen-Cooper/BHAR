@@ -1,7 +1,7 @@
 #!/bin/bash
 cd ..
 
-seeds=(0 1 2)
+seeds=(0)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do

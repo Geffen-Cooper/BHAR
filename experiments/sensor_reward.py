@@ -89,7 +89,9 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 	elif reward_type == "accuracy":
 		# next classify sparse data
 		preds = np.zeros(len(label_sequence))
-		rand_initial_pred = np.random.randint(len(np.unique(label_sequence)))
+		# this causes the inconsistency across runs (just predict zeros for consistency)
+		# rand_initial_pred = np.random.randint(len(np.unique(label_sequence)))
+		rand_initial_pred = 0
 		last_pred = rand_initial_pred
 		last_packet_idx = 0
 		current_packet_idx = 0
@@ -101,6 +103,7 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 					break
 			# predictions hold until this new packet
 			current_packet_idx = at
+			
 			preds[last_packet_idx:current_packet_idx] = last_pred
 			last_packet_idx = current_packet_idx
 
