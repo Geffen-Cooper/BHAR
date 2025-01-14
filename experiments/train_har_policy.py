@@ -163,9 +163,9 @@ def train_LOOCV(**kwargs):
 		# first generate the activity sequence (train, val, test)
 		min_dur = 10
 		max_dur = 30
-		train_data_sequence, train_label_sequence = generate_activity_sequence(train_data,train_labels,min_dur,max_dur,25)
-		val_data_sequence, val_label_sequence = generate_activity_sequence(val_data,val_labels,min_dur,max_dur,25)
-		test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,25)
+		train_data_sequence, train_label_sequence = generate_activity_sequence(train_data,train_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+		val_data_sequence, val_label_sequence = generate_activity_sequence(val_data,val_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+		test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,kwargs['sampling_frequency'])
 
 		# normalize data used for classification, unormalized used for energy harvesting
 		normalized_train_data_sequence = (train_data_sequence-train_ds.mean)/(train_ds.std + 1e-5)
@@ -180,6 +180,7 @@ def train_LOOCV(**kwargs):
 							   kwargs['sampling_frequency'],
 							   kwargs['max_energy'])
 
+		# load trained classifier to use for policy evaluation
 		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)
 
@@ -197,6 +198,10 @@ def train_LOOCV(**kwargs):
 				logger.info(f"Policy: {policy}")
 
 			else: # otherwise, train the policy
+				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
+									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
+									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
+				
 				# create a checkpoint, init sensor policies to opportunistic
 				policy = {bp: [0.,0.] for bp in kwargs['body_parts']}
 				with open(ckpt_path, 'wb') as file:
@@ -216,12 +221,8 @@ def train_LOOCV(**kwargs):
 						'batch_size': kwargs['batch_size'],
 						'epochs': kwargs['epochs'],
 						'val_every_epochs': kwargs['val_every_epochs'],
-						'train_seg_duration':200*25	
+						'train_seg_duration':200*kwargs['sampling_frequency']	
 					}
-					
-					train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
-									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
-									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
 					
 					# load the current policy so we can get the frozen params
 					with open(ckpt_path, 'rb') as file:
@@ -263,11 +264,11 @@ def train_LOOCV(**kwargs):
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
-		active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
-		print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
-		print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
+		# active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
+		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
+		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
 
-		# next load the pretrained classifier
+		# next load the trained classifier
 		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 		sparse_model = sparse_model_builder(**kwargs)
 		sparse_model.eval()
@@ -279,7 +280,7 @@ def train_LOOCV(**kwargs):
 		last_packet_idx = 0
 		current_packet_idx = 0
 		for packet_i in tqdm(range(len(sparse_har_dataset))):
-			packets = sparse_har_dataset[packet_i]
+			packets, labels = sparse_har_dataset[packet_i]
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
 					at = packet['arrival_time']

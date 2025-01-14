@@ -19,9 +19,9 @@ for seed in "${seeds[@]}"; do
             --body_parts chest forearm head shin thigh upperarm waist \
             --activities 0 1 2 3 4 5 6 7 \
             --val_frac 0.1 \
-            --window_size 8 \
+            --window_size 25 \
             --overlap_frac 0.5 \
-            --harvesting_sensor_window_size 8 \
+            --harvesting_sensor_window_size 25 \
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
