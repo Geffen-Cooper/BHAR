@@ -72,11 +72,11 @@ def get_args():
 
 	parser.add_argument(
 				"--model_type",
-				default="dense_synchronous_baseline",
+				default="synchronous_multisensor",
 				type=str,
-				choices=["dense_synchronous_baseline",
-						 "sparse_asychronous_baseline", 
-						 "sparse_asychronous_contextualized"],
+				choices=["synchronous_multisensor",
+						 "asynchronous_single_sensor", 
+						 "asynchronous_multisensor_time_context"],
 				help="Sparse Model Type",
 			)	
 	
@@ -194,6 +194,8 @@ def train_LOOCV(**kwargs):
 				logger.info("Policy Already Trained")
 				with open(ckpt_path, 'rb') as file:
 					policy = pickle.load(file)
+				logger.info(f"Policy: {policy}")
+
 			else: # otherwise, train the policy
 				# create a checkpoint, init sensor policies to opportunistic
 				policy = {bp: [0.,0.] for bp in kwargs['body_parts']}

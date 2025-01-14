@@ -1,14 +1,14 @@
 #!/bin/bash
 cd ..
 
-seeds=(0)
+seeds=(0 1 2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
             --checkpoint_prefix classifier_window_8_acc \
-            --logging_prefix policy_sparse_train \
+            --logging_prefix conservative_asynchronous_single_sensor \
             --policy conservative \
             --architecture "$architecture" \
             --dataset dsads \
@@ -16,7 +16,7 @@ for seed in "${seeds[@]}"; do
             --dataset_top_dir ~/Projects/data/dsads \
             --subjects 1 2 3 4 5 6 7 8 \
             --sensors acc \
-            --body_parts right_leg left_arm \
+            --body_parts torso right_arm left_arm right_leg left_leg \
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
             --window_size 8 \
@@ -25,7 +25,7 @@ for seed in "${seeds[@]}"; do
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
-            --model_type sparse_asychronous_baseline \
+            --model_type asynchronous_single_sensor \
             --batch_size 16 \
             --lr 1e-6 50 \
             --epochs 5 \

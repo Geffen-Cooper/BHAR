@@ -8,7 +8,7 @@ for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
             --checkpoint_prefix classifier_window_8_acc \
-            --logging_prefix policy_sparse_eval \
+            --logging_prefix opportunistic_asynchronous_single_sensor \
             --policy opportunistic \
             --architecture "$architecture" \
             --dataset rwhar \
@@ -25,7 +25,7 @@ for seed in "${seeds[@]}"; do
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
-            --model_type sparse_asychronous_baseline
+            --model_type asynchronous_single_sensor
             # 0: --- sitting
             # 1: --- standing
             # 2: --- lying on back

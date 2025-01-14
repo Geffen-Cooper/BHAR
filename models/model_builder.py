@@ -48,14 +48,14 @@ def sparse_model_builder(**kwargs):
 
     model_type = kwargs['model_type']
 
-    if model_type == 'dense_synchronous_baseline':
+    if model_type == 'synchronous_multisensor':
         # this is standard HAR model
         model = model_builder(**kwargs)
         ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
         return DenseModel(model)
          
-    elif model_type == 'sparse_asychronous_baseline':
+    elif model_type == 'asynchronous_single_sensor':
         # this is multiple individual HAR models
         models = {}
         all_body_parts = kwargs['body_parts']
@@ -65,7 +65,7 @@ def sparse_model_builder(**kwargs):
             ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
             models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
         return MultiSensor(models)
-    elif model_type == 'sparse_asychronous_contextualized':
+    elif model_type == 'asynchronous_multisensor_time_context':
         # this is standard HAR model
         model = model_builder(**kwargs)
         ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])

@@ -70,7 +70,6 @@ class ZOTrainer():
 
 		self.logger.info(f"Original Epsilon: {original_epsilon}")
 
-		# why test loss here?
 		val_loss = self.validate(0,writer)
 		best_val_reward = val_loss['avg_reward']
 
@@ -79,7 +78,7 @@ class ZOTrainer():
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				val_loss = self.validate(iteration, writer)
 				if val_loss['avg_reward'] >= best_val_reward:
-					self.logger.info(f"Saving new best parameters {self.optimizer.params}")
+					self.logger.info(f"Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
 					best_params = self.optimizer.params
 					best_val_reward = val_loss['avg_reward']
 					# save params: load checkpoint, update, save checkpoint
@@ -94,6 +93,7 @@ class ZOTrainer():
 				self.logger.info(f"Parameters are {best_params}")
 				break
 
+		self.logger.info(f"best reward: {best_val_reward}")
 		return best_params
 			
 	def validate(self, iteration, writer):

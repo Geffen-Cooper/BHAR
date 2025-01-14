@@ -1,15 +1,15 @@
 #!/bin/bash
 cd ..
 
-seeds=(2)
+seeds=(0 1 2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
-            --checkpoint_prefix classifier_window_8_acc \
-            --logging_prefix policy_sparse_eval \
-            --policy conservative \
+            --checkpoint_prefix classifier_window_25_acc \
+            --logging_prefix unconstrained_synchronous_multisensor \
+            --policy unconstrained_12 \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -25,7 +25,7 @@ for seed in "${seeds[@]}"; do
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
-            --model_type sparse_asychronous_baseline
+            --model_type synchronous_multisensor
             # 0: --- sitting
             # 1: --- standing
             # 2: --- lying on back
