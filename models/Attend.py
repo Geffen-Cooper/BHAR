@@ -113,7 +113,7 @@ class FeatureExtractor(nn.Module):
         if ages is not None:
             temporal_context = self.t_context_layer(ages)
             temporal_context = temporal_context.view(x.shape[0],self.window_size-2,-1).unsqueeze(1).repeat(1,x.shape[1],1,1)
-            x = x + temporal_context
+            x = x * temporal_context
 
         # apply self-attention on each temporal dimension (along sensor and feature dimensions)
         refined = torch.cat(

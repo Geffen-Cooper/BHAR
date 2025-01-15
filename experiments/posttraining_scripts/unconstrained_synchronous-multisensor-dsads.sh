@@ -7,9 +7,11 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
-            --checkpoint_prefix classifier_window_25_acc \
-            --logging_prefix unconstrained_synchronous_multisensor \
-            --policy unconstrained_12 \
+            --multisensor_checkpoint_prefix multisensor_classifier_window_25_acc \
+            --policy_logging_prefix unconstrained_synchronous-multisensor \
+            --policy unconstrained \
+            --unconstrained_stride 12 \
+            --model_type synchronous_multisensor \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -20,12 +22,10 @@ for seed in "${seeds[@]}"; do
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
             --window_size 25 \
-            --overlap_frac 0.5 \
             --harvesting_sensor_window_size 25 \
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
-            --max_energy 200e-6 \
-            --model_type synchronous_multisensor
+            --max_energy 200e-6
             # 0: --- sitting
             # 1: --- standing
             # 2: --- lying on back

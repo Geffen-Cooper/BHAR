@@ -9,7 +9,7 @@ for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       for bp in "${bodyparts[@]}"; do
         python train_har_classifier.py \
-              --logging_prefix "classifier_window_8_acc_${bp}" \
+              --logging_prefix "single_sensor_classifier_window_8_acc_${bp}" \
               --architecture "$architecture" \
               --dataset dsads \
               --seed "$seed" \

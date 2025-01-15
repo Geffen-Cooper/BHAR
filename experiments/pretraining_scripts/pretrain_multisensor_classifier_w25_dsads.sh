@@ -6,10 +6,8 @@ architectures=("attend")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
-      python train_har_policy.py \
-            --checkpoint_prefix classifier_window_8_acc \
-            --logging_prefix opportunistic_asynchronous_single_sensor \
-            --policy opportunistic \
+      python train_har_classifier.py \
+            --logging_prefix multisensor_classifier_window_25_acc \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -19,13 +17,13 @@ for seed in "${seeds[@]}"; do
             --body_parts torso right_arm left_arm right_leg left_leg \
             --activities 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 \
             --val_frac 0.1 \
-            --window_size 8 \
+            --window_size 25 \
             --overlap_frac 0.5 \
-            --harvesting_sensor_window_size 8 \
-            --leakage 6.6e-6 \
-            --sampling_frequency 25 \
-            --max_energy 200e-6 \
-            --model_type asynchronous_single_sensor
+            --batch_size 256 \
+            --lr 0.0001 \
+            --epochs 25 \
+            --ese 10 \
+            --log_freq 200
             # 0: --- sitting
             # 1: --- standing
             # 2: --- lying on back

@@ -7,7 +7,7 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_classifier.py \
-            --logging_prefix classifier_window_25_acc \
+            --logging_prefix multisensor_classifier_window_25_acc \
             --architecture "$architecture" \
             --dataset rwhar \
             --seed "$seed" \

@@ -8,6 +8,7 @@ import pickle
 from pathlib import Path
 from tqdm import tqdm
 from sklearn.metrics import f1_score
+import multiprocessing
 
 from models.model_builder import model_builder, sparse_model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders, generate_activity_sequence
@@ -21,28 +22,43 @@ from datasets.sparse_data_utils import SparseHarDataset
 from experiments.zero_order_algos import signSGD, SGD, PatternSearch
 from experiments.ZOTrainer_modified import ZOTrainer
 from experiments.sensor_reward import PolicyTrain, reward
-import multiprocessing
+
 
 def get_args():
 	parser = argparse.ArgumentParser(
 			description="Dataset and model arguments for training HAR policies",
 			formatter_class=argparse.ArgumentDefaultsHelpFormatter
 		)
-	parser.add_argument("--eval", action="store_true", help="Get results of pretrained policies")
-	parser.add_argument("--checkpoint_prefix", default="logfile", type=str, help="name for classifier training session")
-	parser.add_argument("--logging_prefix", default="logfile", type=str, help="name for policy training session")
+	parser.add_argument("--eval", action="store_true", help="Get results of pretrained policies (optional)")
+	parser.add_argument("--single_sensor_checkpoint_prefix", default="single_sensor_logfile", type=str, help="name for single sensor classifier training session (optioanl)")
+	parser.add_argument("--multisensor_checkpoint_prefix", default="multisensor_logfile", type=str, help="name for multisensor classifier training session (optional)")
+	parser.add_argument("--policy_logging_prefix", default="policy_logfile", type=str, help="name for policy training session (optional)")
 	parser.add_argument(
 			"--policy",
-			default="unconstrained_1",
+			default="unconstrained",
 			type=str,
+			choices=["unconstrained", "opportunistic", "conservative"],
 			help="Energy Spending Policy",
+			required=True
 		)
+	parser.add_argument("--unconstrained_stride",default=1,type=int,help="If using unconstrained policy, what stride to use for inference sliding windows (optional)",)
+	parser.add_argument(
+			"--model_type",
+			default="synchronous_multisensor",
+			type=str,
+			choices=["synchronous_multisensor",
+					 "asynchronous_single_sensor", 
+					 "asynchronous_multisensor",
+					 "asynchronous_multisensor_time_context"],
+			help="Sparse Model Type",
+		)	
 	parser.add_argument(
 			"--architecture",
 			default="attend",
 			type=str,
 			choices=["attend", "tinyhar", "convlstm"],
-			help="HAR architecture",
+			help="HAR architecture used for single sensor or multisensor classification",
+			required=True
 		)
 	parser.add_argument(
 			"--dataset",
@@ -50,46 +66,36 @@ def get_args():
 			type=str,
 			choices=["dsads", "rwhar", "pamap2", "opportunity"],
 			help="HAR dataset",
+			required=True
 		)
-	parser.add_argument("--seed", default=0, type=int, help="seed for experiment")
-	parser.add_argument("--dataset_top_dir", default="~/Projects/data/dsads", type=str, help="path to dataset")
-	parser.add_argument('--subjects', 
-						default=[1,2,3,4,5,6,7], nargs='+', type=int, help='List of subjects')
-	parser.add_argument('--sensors', 
-						default=["acc"], nargs='+', type=str, help='List of sensors')
-	parser.add_argument('--body_parts',
-						default=["torso","right_arm","left_arm","right_leg","left_leg"], nargs='+', type=str, help='List of body parts')
-	parser.add_argument('--activities', 
-						default=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18], nargs='+', type=int, help='List of activities')
-	parser.add_argument("--val_frac", default=0.1, type=float, help="fraction of training data for validation")
-
-	parser.add_argument("--window_size", default=8, type=int, help="sliding window size for pretrained model")
-	parser.add_argument("--overlap_frac", default=0.5, type=float, help="fraction of window to overlap")
-	parser.add_argument("--harvesting_sensor_window_size", default=8, type=int, help="window size for KEH sensor")
+	parser.add_argument("--seed", default=0, type=int, help="seed for experiment, this must match the seeds used when training the classifier", required=True)
+	parser.add_argument("--dataset_top_dir", default="~/Projects/data/dsads", type=str, help="path to dataset", required=True)
+	parser.add_argument('--subjects', default=[1,2,3,4,5,6,7], nargs='+', type=int, help='List of subjects', required = True)
+	parser.add_argument('--sensors', default=["acc"], nargs='+', type=str, help='List of sensors', required=True)
+	parser.add_argument('--body_parts',default=["torso","right_arm","left_arm","right_leg","left_leg"], nargs='+', type=str, help='List of body parts', required=True)
+	parser.add_argument('--activities', default=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18], nargs='+', type=int, help='List of activities',required=True)
+	parser.add_argument("--val_frac", default=0.1, type=float, help="fraction of training data for validation",required=True)
+	parser.add_argument("--window_size", default=8, type=int, help="sliding window size for pretrained model",required=True)
+	parser.add_argument("--harvesting_sensor_window_size", default=8, type=int, help="window size for KEH sensor, for unconstrained policy this is packet size",required=True)
 
 	parser.add_argument("--leakage", default=6.6e-6, type=float, help="idle power in J")
 	parser.add_argument("--sampling_frequency", default=25, type=int, help="acceleromter sampling frequency")
 	parser.add_argument("--max_energy", default=200e-6, type=float, help="energy capacity of sensor in J")
-
-	parser.add_argument(
-				"--model_type",
-				default="synchronous_multisensor",
-				type=str,
-				choices=["synchronous_multisensor",
-						 "asynchronous_single_sensor", 
-						 "asynchronous_multisensor_time_context"],
-				help="Sparse Model Type",
-			)	
 	
 	# zero order arguments
-	parser.add_argument("--batch_size", default=16, type=int, help="training batch size")
-	parser.add_argument("--lr", default=[1e-6,5], nargs='+', type=float, help="learning rate for each policy parameter")
-	parser.add_argument("--epochs", default=5, type=int, help="training epochs")
-	parser.add_argument("--val_every_epochs", default=1, type=int, help="after how many batches to log")
-	parser.add_argument("--param_init_vals", default=[0.0,0.0], nargs='+',type=float, help="init value for each parameter")
-	parser.add_argument("--param_min_vals", default=[0.0,0.0], nargs='+',type=float, help="min parameter bound")
-	parser.add_argument("--param_max_vals", default=[1.5e-4,10000], nargs='+',type=float, help="max parameter bound")
+	parser.add_argument("--policy_batch_size", default=16, type=int, help="training batch size")
+	parser.add_argument("--policy_lr", default=[1e-6,5], nargs='+', type=float, help="learning rate for each policy parameter")
+	parser.add_argument("--policy_epochs", default=5, type=int, help="training epochs")
+	parser.add_argument("--policy_val_every_epochs", default=1, type=int, help="after how many batches to log")
+	parser.add_argument("--policy_param_init_vals", default=[0.0,0.0], nargs='+',type=float, help="init value for each parameter")
+	parser.add_argument("--policy_param_min_vals", default=[0.0,0.0], nargs='+',type=float, help="min parameter bound")
+	parser.add_argument("--policy_param_max_vals", default=[1.5e-4,10000], nargs='+',type=float, help="max parameter bound")
 
+
+	# finetuning arguments
+	parser.add_argument("--finetune_batch_size", default=32, type=int, help="finetuning batch size")
+	parser.add_argument("--finetune_lr", default=1e-4, type=float, help="learning rate for finetuning model")
+	parser.add_argument("--finetune_epochs", default=5, type=int, help="finetuning epochs")
 
 	args = parser.parse_args()
 
@@ -181,10 +187,6 @@ def train_LOOCV(**kwargs):
 							   kwargs['sampling_frequency'],
 							   kwargs['max_energy'])
 
-		# load trained classifier to use for policy evaluation
-		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-		sparse_model = sparse_model_builder(**kwargs)
-
 		policy = kwargs['policy']
 
 		# ============== next learn the policy (train, val) if we want to
@@ -197,8 +199,13 @@ def train_LOOCV(**kwargs):
 				with open(ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
 				logger.info(f"Policy: {policy}")
+				for bp in kwargs['body_parts'].keys():
+					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 
 			else: # otherwise, train the policy
+				# load trained classifier to use for policy evaluation
+				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+				sparse_model = sparse_model_builder(**kwargs)
 
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
 									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
@@ -240,17 +247,6 @@ def train_LOOCV(**kwargs):
 
 					logger.info(f"Training: {bp}, policy: {policy['current']}")
 
-					eh = EnergyHarvester()
-					ehs = EnergyHarvestingSensor(eh, 
-										kwargs['harvesting_sensor_window_size'], 
-										kwargs['leakage'], 
-										kwargs['sampling_frequency'],
-										kwargs['max_energy'])
-
-					train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
-									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
-									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
-
 					# train the policy for the given bp with others frozen
 					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,bp, file_lock, barrier)
 					zo_trainers.append(zo_trainer)
@@ -269,12 +265,58 @@ def train_LOOCV(**kwargs):
 				# load trained policy
 				with open(ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
+				for bp in kwargs['body_parts']:
+					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 		else:
 			# opportunistic or dense for all sensors
 			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
 
 
-		# ============= after getting policy, finetune model if needed
+		# ============= after getting policy, apply it to train, val, and test data
+		train_packet_idxs = {}
+		val_packet_idxs = {}
+		test_packet_idxs = {}
+		per_bp_data_train = {}
+		per_bp_data_val ={}
+		per_bp_data_test = {}
+		for bp in kwargs['body_parts']:
+			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
+			per_bp_data_train[bp] = normalized_train_data_sequence[:,bp_channels]
+			per_bp_data_val[bp] = normalized_val_data_sequence[:,bp_channels]
+			per_bp_data_test[bp] = normalized_test_data_sequence[:,bp_channels]
+			
+			train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
+			val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
+			test_packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
+		
+		train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
+		val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
+		test_ds = SparseHarDataset(per_bp_data_test, test_label_sequence, test_packet_idxs)
+
+
+		# if we want to train the model, then build data loaders
+		# TODO: edit this because we can also finetune the basic multisensor model with no time context
+		# then in the multisensor wrapper we need to account for the batch dimension
+		if "time" in kwargs['model_type']:
+			train_loader = torch.utils.data.DataLoader(train_ds, batch_size=kwargs['finetune_batch_size'], shuffle=True, pin_memory=False,drop_last=True,num_workers=4)
+			val_loader = torch.utils.data.DataLoader(val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
+
+			# load the pretrained model
+			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+			sparse_model = sparse_model_builder(**kwargs)
+			sparse_model.train()
+
+			# train it
+			finetune_args = {}
+			finetune_args['model'] = sparse_model
+			finetune_args['loss_fn'] = nn.CrossEntropyLoss()
+			finetune_args['optimizer'] = torch.optim.Adam(sparse_model.parameters(),lr=kwargs['finetune_lr'])
+			finetune_args['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
+			finetune_args['device'] = device
+			finetune_args['train_loader'] = train_loader
+			finetune_args['val_loader'] = val_loader
+			finetune_args['logger'] = logger
+			finetune_args['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(finetune_args['optimizer'],kwargs['finetune_epochs'])
 		
 		# finetune the model if contextualized specified, otherwise load the other models
 		# if the checkpoint already exists then just load it
@@ -284,35 +326,13 @@ def train_LOOCV(**kwargs):
 		# load contextualized model
 		# put in standard training loop using existing train function
 
-		eh = EnergyHarvester()
-		ehs = EnergyHarvestingSensor(eh, 
-							   kwargs['harvesting_sensor_window_size'], 
-							   kwargs['leakage'], 
-							   kwargs['sampling_frequency'],
-							   kwargs['max_energy'])
-			
-
-		# test the learned policy and/or contextualized model
-		packet_idxs = {}
-		per_bp_data = {}
-		for bp in kwargs['body_parts']:
-			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
-			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
-			if 'conservative' in kwargs['policy']:
-				packet_idxs[bp] = ehs.sparsify_data(f"conservative_{policy[bp][0]}_{policy[bp][1]}", test_data_sequence[:,bp_channels])
-			else:
-				packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
 		
-		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
+		
+		# ======================= test ==============================
 
-		active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
+		active_idxs, passive_idxs = test_ds.region_decomposition()
 		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
-
-		# next load the trained classifier
-		kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-		sparse_model = sparse_model_builder(**kwargs)
-		sparse_model.eval()
 
 		# next classify sparse data
 		preds = np.zeros(len(test_label_sequence))
@@ -320,8 +340,8 @@ def train_LOOCV(**kwargs):
 		last_pred = rand_initial_pred
 		last_packet_idx = 0
 		current_packet_idx = 0
-		for packet_i in tqdm(range(len(sparse_har_dataset))):
-			packets, labels = sparse_har_dataset[packet_i]
+		for packet_i in tqdm(range(len(test_ds))):
+			packets, labels = test_ds[packet_i]
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
 					at = packet['arrival_time']

@@ -72,4 +72,4 @@ def sparse_model_builder(**kwargs):
         model = model_builder(**kwargs)
         ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
-        return Tem(model)
+        return TemporalContextModel(model)

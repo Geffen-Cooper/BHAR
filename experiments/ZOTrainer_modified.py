@@ -82,19 +82,13 @@ class ZOTrainer():
 		self.policy_trainer.model.eval()
 
 		self.logger.info(f"BP: {self.bp}, Original Epsilon: {original_epsilon}")
-
-		if p_id == 0:
+		self.logger.info("Opportunistic")
+		if p_id == 2:
 			val_loss = self.validate(0,writer)
 			best_val_reward = val_loss['avg_reward']
 		self.barrier.wait()
 
 		for iteration in tqdm(range(self.train_cfg['epochs'])):
-			# every iteration, read the most up to date parameters
-			with self.file_lock:
-				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
-					policy = pickle.load(file)['current']
-					for bp in self.frozen_sensor_params:
-						self.frozen_sensor_params[bp] = policy[bp]
 
 			self.train_one_epoch(iteration, writer)
 
@@ -103,7 +97,7 @@ class ZOTrainer():
 			# 	with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
 			# 		policy = pickle.load(file)['current']
 			# 		self.logger.info(f"BP: {self.bp}, params: {policy}")
-			self.barrier.wait()
+			# self.barrier.wait()
 
 			# then write the current bp updated parameter
 			with self.file_lock:
@@ -113,9 +107,16 @@ class ZOTrainer():
 				with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
 					pickle.dump(policy, file)
 
+			# wait until all threads updated parameters
+			with self.file_lock:
+				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+					policy = pickle.load(file)['current']
+					self.logger.info(f"BP: {self.bp}, params: {policy}")
+			self.barrier.wait()
+
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				# only one process needs to eval
-				if p_id == 0:
+				if p_id == 2:
 					val_loss = self.validate(iteration, writer)
 					if val_loss['avg_reward'] >= best_val_reward:
 						self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
@@ -153,7 +154,7 @@ class ZOTrainer():
 		} 
 		reward, f1 = self.reward_function(self.optimizer.params,**f_args)
 
-		self.logger.info("Body Part: {}, Iteration {}: params: {}, val_policy_f1: {:.3f}".format(self.bp, iteration, self.optimizer.params, f1))
+		self.logger.info("Body Part: {}, Iteration {}: params: {}, val_policy_f1: {:.3f}\n".format(self.bp, iteration, self.optimizer.params, f1))
 		
 		with self.file_lock:
 			with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
