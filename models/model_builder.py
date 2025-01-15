@@ -53,6 +53,7 @@ def sparse_model_builder(**kwargs):
         model = model_builder(**kwargs)
         ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.eval()
         return DenseModel(model)
          
     elif model_type == 'asynchronous_single_sensor':
@@ -64,6 +65,7 @@ def sparse_model_builder(**kwargs):
             models[bp] = model_builder(**kwargs)
             ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
             models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+            models[bp].eval()
         return MultiSensor(models)
     elif model_type == 'asynchronous_multisensor_time_context':
         # this is standard HAR model
