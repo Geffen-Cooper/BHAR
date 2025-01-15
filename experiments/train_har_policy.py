@@ -267,7 +267,7 @@ def train_LOOCV(**kwargs):
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
-		# active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
+		active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
 		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
 
@@ -304,6 +304,12 @@ def train_LOOCV(**kwargs):
 		test_f1 = f1_score(test_label_sequence,preds,average='macro')
 		
 		logger.info(f"Test F1: {test_f1}, Test Acc: {test_acc}")
+		active_region = len(active_idxs)/(len(active_idxs)+len(passive_idxs))
+		active_error = 1-(preds[active_idxs] == test_label_sequence[active_idxs]).mean()
+		passive_region = len(passive_idxs)/(len(active_idxs)+len(passive_idxs))
+		passive_error = 1-(preds[passive_idxs] == test_label_sequence[passive_idxs]).mean()
+		logger.info(f"Active Region: {round(active_region,3)}, Active Error: {round(active_error,3)} --> {round(active_region*active_error,3)} ")
+		logger.info(f"Passive Region: {round(passive_region,3)}, Passive Error: {round(passive_error,3)} --> {round(passive_region*passive_error,3)}")
 		logger.info("==========================================\n\n")
 		results_table[subject] = (test_f1, test_acc)
 

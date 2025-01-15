@@ -45,7 +45,7 @@ class ZOTrainer():
 			'per_body_part_data_normalized': data_n,
 			'label_sequence': labels,
 			'harvesting_sensor': self.policy_trainer.harvesting_sensor,
-			'reward_type': 'accuracy',
+			'reward_type': 'active_region',
 			'classifier': self.policy_trainer.model,
 			'train_mode':True
 		} 
