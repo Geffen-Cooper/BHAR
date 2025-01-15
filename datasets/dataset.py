@@ -70,7 +70,7 @@ class HARClassifierDataset(Dataset):
 			  val: bool, 
 			  val_frac: float, 
 			  window_size: int, 
-			  overlap_frac: float, 
+			  overlap_frac: float = 0.5, 
 			  normalize: bool = True,
 			  **kwargs):
 

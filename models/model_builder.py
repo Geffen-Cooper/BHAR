@@ -9,7 +9,7 @@ import torch
 from models.Attend import AttendDiscriminate
 from models.ConvLstm import DeepConvLSTM
 from utils.setup_funcs import PROJECT_ROOT
-from models.sparse_wrappers import DenseModel, MultiSensor, TemporalContextModel
+from models.sparse_wrappers import MultiSensorModel, SingleSensorModel, TemporalContextModel
 
 def model_builder(**kwargs):
     """ Initializes the specified architecture
@@ -51,10 +51,10 @@ def sparse_model_builder(**kwargs):
     if model_type == 'synchronous_multisensor':
         # this is standard HAR model
         model = model_builder(**kwargs)
-        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
+        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
         model.eval()
-        return DenseModel(model)
+        return MultiSensorModel(model), ckpt_path
          
     elif model_type == 'asynchronous_single_sensor':
         # this is multiple individual HAR models
@@ -63,13 +63,21 @@ def sparse_model_builder(**kwargs):
         for bp in all_body_parts:
             kwargs['body_parts'] = [bp]
             models[bp] = model_builder(**kwargs)
-            ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
+            ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['single_sensor_checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
             models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
             models[bp].eval()
-        return MultiSensor(models)
+        return SingleSensorModel(models), ckpt_path
+    
+    elif model_type == 'asynchronous_multisensor':
+        model = model_builder(**kwargs)
+        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
+        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.eval()
+        return MultiSensorModel(model), ckpt_path
+
     elif model_type == 'asynchronous_multisensor_time_context':
         # this is standard HAR model
         model = model_builder(**kwargs)
-        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
+        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
-        return TemporalContextModel(model)
+        return TemporalContextModel(model), ckpt_path

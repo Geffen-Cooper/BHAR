@@ -8,7 +8,7 @@ for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
             --multisensor_checkpoint_prefix multisensor_classifier_window_25_acc \
-            --policy_logging_prefix unconstrained_synchronous-multisensor \
+            --logging_prefix unconstrained-synchronous_multisensor \
             --policy unconstrained \
             --unconstrained_stride 12 \
             --model_type synchronous_multisensor \

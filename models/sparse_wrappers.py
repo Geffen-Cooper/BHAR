@@ -36,8 +36,11 @@ class MultiSensorModel(nn.Module):
             packet_data.append(packet['data'])
         
         # merge channels, then convert to float tensor with batch dimension
-        # we only do inference with this model so need add batch dimension (no data loader)
-        packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float().unsqueeze(0)
+        packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float()
+
+        if len(packet_data.shape == 2): # no batch dimension
+            packet_data = packet_data.unsqueeze(0)
+
         return self.multisensor_model(packet_data)
 
 

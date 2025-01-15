@@ -7,10 +7,10 @@ architectures=("attend")
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
-            --single_sensor_checkpoint_prefix single_sensor_classifier_window_8_acc \
-            --policy_logging_prefix conservative_asynchronous-single_sensor \
-            --policy conservative \
-            --model_type asynchronous_single_sensor \
+            --multisensor_checkpoint_prefix multisensor_classifier_window_8_acc \
+            --logging_prefix opportunistic-asynchronous_multisensor_time_context \
+            --policy opportunistic \
+            --model_type asynchronous_multisensor_time_context \
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
@@ -31,7 +31,10 @@ for seed in "${seeds[@]}"; do
             --policy_val_every_epochs 1 \
             --policy_param_init_vals 0. 0. \
             --policy_param_min_vals 0. 0. \
-            --policy_param_max_vals 1.5e-4 10000
+            --policy_param_max_vals 1.5e-4 10000 \
+            --finetune_batch_size 32 \
+            --finetune_lr 1e-4 \
+            --finetune_epochs 5
     done
 done
 

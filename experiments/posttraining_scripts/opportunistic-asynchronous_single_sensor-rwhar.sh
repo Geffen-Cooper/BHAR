@@ -8,7 +8,7 @@ for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
             --single_sensor_checkpoint_prefix single_sensor_classifier_window_8_acc \
-            --policy_logging_prefix opportunistic_asynchronous-single_sensor \
+            --logging_prefix opportunistic-asynchronous_single_sensor \
             --policy opportunistic \
             --model_type asynchronous_single_sensor \
             --architecture "$architecture" \

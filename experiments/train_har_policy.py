@@ -32,7 +32,7 @@ def get_args():
 	parser.add_argument("--eval", action="store_true", help="Get results of pretrained policies (optional)")
 	parser.add_argument("--single_sensor_checkpoint_prefix", default="single_sensor_logfile", type=str, help="name for single sensor classifier training session (optioanl)")
 	parser.add_argument("--multisensor_checkpoint_prefix", default="multisensor_logfile", type=str, help="name for multisensor classifier training session (optional)")
-	parser.add_argument("--policy_logging_prefix", default="policy_logfile", type=str, help="name for policy training session (optional)")
+	parser.add_argument("--logging_prefix", default="logfile", type=str, help="name for training session (optional)")
 	parser.add_argument(
 			"--policy",
 			default="unconstrained",
@@ -189,8 +189,8 @@ def train_LOOCV(**kwargs):
 
 		policy = kwargs['policy']
 
-		# ============== next learn the policy (train, val) if we want to
-		if 'conservative' in kwargs['policy']:
+		# ================================== Learn or load the policy
+		if kwargs['policy'] == 'conservative':
 			logger.info("Train policy ===========")
 			# if the policy is already trained, just load parameters
 			ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])+'.pkl'
@@ -204,8 +204,10 @@ def train_LOOCV(**kwargs):
 
 			else: # otherwise, train the policy
 				# load trained classifier to use for policy evaluation
+				# this should return the asychronous_single_sensor model since
+				# we cannot use the pretrained multisensor models to evaluate the policy
 				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-				sparse_model = sparse_model_builder(**kwargs)
+				sparse_model,_ = sparse_model_builder(**kwargs)
 
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
 									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
@@ -225,18 +227,18 @@ def train_LOOCV(**kwargs):
 
 				# optimize sensors iteratively
 				for bp in kwargs['body_parts']:
-					params_bounds = [[x, y] for x, y in zip(kwargs['param_min_vals'], kwargs['param_max_vals'])]
+					params_bounds = [[x, y] for x, y in zip(kwargs['policy_param_min_vals'], kwargs['policy_param_max_vals'])]
 					optimizer_cfg = {
 						'optimizer': PatternSearch, # PatternSearch, signSGD, SGD
-						'init_params': kwargs['param_init_vals'],
-						'lr': kwargs['lr'],
+						'init_params': kwargs['policy_param_init_vals'],
+						'lr': kwargs['policy_lr'],
 						'params_bounds': params_bounds,
 					}
 
 					train_cfg = {
-						'batch_size': kwargs['batch_size'],
-						'epochs': kwargs['epochs'],
-						'val_every_epochs': kwargs['val_every_epochs'],
+						'batch_size': kwargs['policy_batch_size'],
+						'epochs': kwargs['policy_epochs'],
+						'val_every_epochs': kwargs['policy_val_every_epochs'],
 						'train_seg_duration':200*kwargs['sampling_frequency']	
 					}
 					
@@ -268,6 +270,10 @@ def train_LOOCV(**kwargs):
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 		else:
+			# load classifier to use for policy evaluation
+			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+			sparse_model,_ = sparse_model_builder(**kwargs)
+
 			# opportunistic or dense for all sensors
 			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
 
@@ -295,19 +301,21 @@ def train_LOOCV(**kwargs):
 
 
 		# if we want to train the model, then build data loaders
-		# TODO: edit this because we can also finetune the basic multisensor model with no time context
-		# then in the multisensor wrapper we need to account for the batch dimension
-		if "time" in kwargs['model_type']:
+		# any asynchronous_multisensor model needs to be finetuned
+		if "asynchronous_multisensor" in kwargs['model_type']:
 			train_loader = torch.utils.data.DataLoader(train_ds, batch_size=kwargs['finetune_batch_size'], shuffle=True, pin_memory=False,drop_last=True,num_workers=4)
 			val_loader = torch.utils.data.DataLoader(val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
 
 			# load the pretrained model
+			# this should return one of the asynchronous_multisensor models
 			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-			sparse_model = sparse_model_builder(**kwargs)
+			sparse_model, ckpt_path = sparse_model_builder(**kwargs)
 			sparse_model.train()
 
 			# train it
 			finetune_args = {}
+			finetune_args['epochs'] = kwargs['finetune_epochs']
+			finetune_args['ese'] = finetune_args['epochs']
 			finetune_args['model'] = sparse_model
 			finetune_args['loss_fn'] = nn.CrossEntropyLoss()
 			finetune_args['optimizer'] = torch.optim.Adam(sparse_model.parameters(),lr=kwargs['finetune_lr'])
@@ -316,19 +324,17 @@ def train_LOOCV(**kwargs):
 			finetune_args['train_loader'] = train_loader
 			finetune_args['val_loader'] = val_loader
 			finetune_args['logger'] = logger
+			finetune_args['log_freq'] = 200
 			finetune_args['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(finetune_args['optimizer'],kwargs['finetune_epochs'])
-		
-		# finetune the model if contextualized specified, otherwise load the other models
-		# if the checkpoint already exists then just load it
+			train(**finetune_args)
 
-		# get train, val, test loaders
-			# apply the trained policy to get sparse hard dataset objects
-		# load contextualized model
-		# put in standard training loop using existing train function
+			# load the best one
+			sparse_model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
 
 		
 		
 		# ======================= test ==============================
+		sparse_model.eval()
 
 		active_idxs, passive_idxs = test_ds.region_decomposition()
 		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
@@ -389,7 +395,11 @@ if __name__ == '__main__':
 	args = vars(args)
 
 	# organize logs by dataset and architecture
-	args['checkpoint_prefix'] = os.path.join(args['dataset'],args['architecture'],args['checkpoint_prefix'])
+	if 'multisensor_checkpoint_prefix' in args.keys():
+		args['multisensor_checkpoint_prefix'] = os.path.join(args['dataset'],args['architecture'],args['multisensor_checkpoint_prefix'])
+	if 'single_sensor_checkpoint_prefix' in args.keys():
+		args['single_sensor_checkpoint_prefix'] = os.path.join(args['dataset'],args['architecture'],args['single_sensor_checkpoint_prefix'])
+
 	args['logging_prefix'] = os.path.join(args['dataset'],args['architecture'],args['logging_prefix'])
 
 	if eval_only:
