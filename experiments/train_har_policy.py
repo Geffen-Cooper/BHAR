@@ -21,6 +21,7 @@ from datasets.sparse_data_utils import SparseHarDataset
 from experiments.zero_order_algos import signSGD, SGD, PatternSearch
 from experiments.ZOTrainer_modified import ZOTrainer
 from experiments.sensor_reward import PolicyTrain, reward
+import multiprocessing
 
 def get_args():
 	parser = argparse.ArgumentParser(
@@ -194,18 +195,26 @@ def train_LOOCV(**kwargs):
 			if os.path.exists(ckpt_path):
 				logger.info("Policy Already Trained")
 				with open(ckpt_path, 'rb') as file:
-					policy = pickle.load(file)
+					policy = pickle.load(file)['best']
 				logger.info(f"Policy: {policy}")
 
 			else: # otherwise, train the policy
+
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
 									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
 									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
 				
 				# create a checkpoint, init sensor policies to opportunistic
-				policy = {bp: [0.,0.] for bp in kwargs['body_parts']}
+				policy = {'current': {bp: [0.,0.] for bp in kwargs['body_parts']},
+			  			  'best': {bp: [0.,0.] for bp in kwargs['body_parts']}}
 				with open(ckpt_path, 'wb') as file:
 					pickle.dump(policy, file)
+
+				file_lock = multiprocessing.Lock()
+				barrier = multiprocessing.Barrier(len(kwargs['body_parts']))
+
+				processes = []
+				zo_trainers = []
 
 				# optimize sensors iteratively
 				for bp in kwargs['body_parts']:
@@ -224,20 +233,42 @@ def train_LOOCV(**kwargs):
 						'train_seg_duration':200*kwargs['sampling_frequency']	
 					}
 					
-					# load the current policy so we can get the frozen params
-					with open(ckpt_path, 'rb') as file:
-						frozen_policy = pickle.load(file)
-					frozen_policy.pop(bp)
+					# # load the current policy so we can get the frozen params
+					# with open(ckpt_path, 'rb') as file:
+					# 	frozen_policy = pickle.load(file)
+					# frozen_policy.pop(bp)
 
-					logger.info(f"Training: {bp}, frozen params: {frozen_policy}")
+					logger.info(f"Training: {bp}, policy: {policy['current']}")
+
+					eh = EnergyHarvester()
+					ehs = EnergyHarvestingSensor(eh, 
+										kwargs['harvesting_sensor_window_size'], 
+										kwargs['leakage'], 
+										kwargs['sampling_frequency'],
+										kwargs['max_energy'])
+
+					train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
+									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
+									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
 
 					# train the policy for the given bp with others frozen
-					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,frozen_policy,bp)
-					zo_trainer.train()
+					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,bp, file_lock, barrier)
+					zo_trainers.append(zo_trainer)
+					
+					# zo_trainer.train()
+
+				for i, bp in enumerate(kwargs['body_parts']):
+					p = multiprocessing.Process(target=zo_trainers[i].train,args=(i,))
+					processes.append(p)
+					p.start()
+
+				for p in processes:
+					p.join()
+					
 
 				# load trained policy
 				with open(ckpt_path, 'rb') as file:
-					policy = pickle.load(file)
+					policy = pickle.load(file)['best']
 		else:
 			# opportunistic or dense for all sensors
 			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
@@ -252,6 +283,13 @@ def train_LOOCV(**kwargs):
 			# apply the trained policy to get sparse hard dataset objects
 		# load contextualized model
 		# put in standard training loop using existing train function
+
+		eh = EnergyHarvester()
+		ehs = EnergyHarvestingSensor(eh, 
+							   kwargs['harvesting_sensor_window_size'], 
+							   kwargs['leakage'], 
+							   kwargs['sampling_frequency'],
+							   kwargs['max_energy'])
 			
 
 		# test the learned policy and/or contextualized model

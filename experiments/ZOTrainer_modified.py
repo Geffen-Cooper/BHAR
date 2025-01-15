@@ -12,19 +12,32 @@ import pickle
 torch.set_printoptions(sci_mode=True)
 
 class ZOTrainer():
-	def __init__(self, optimizer_cfg, train_cfg, policy_trainer, reward_function, logger, frozen_sensor_params, training_bp):
+	def __init__(self, optimizer_cfg, train_cfg, policy_trainer, reward_function, logger, training_bp, file_lock, barrier):
 		self.optimizer_cfg = optimizer_cfg
 		self.train_cfg = train_cfg
 
 		self.policy_trainer = policy_trainer
 		self.reward_function = reward_function
 		self.logger = logger
-		self.frozen_sensor_params = frozen_sensor_params
+		self.frozen_sensor_params = {}
+
+		self.file_lock = file_lock
+		self.barrier = barrier
 
 		self.bp = training_bp
 
+		# all other body parts are frozen parameters
+		with file_lock:
+			# save params: load checkpoint, update, save checkpoint
+			with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+				policy = pickle.load(file)['current']
+				for bp in policy.keys():
+					if bp != self.bp:
+						self.frozen_sensor_params[bp] = policy[bp]
+		
+
 		self._build_optimizer()
-		self.logger.info("\n=========== Policy Training ===========")
+		self.logger.info(f"\nBP: {self.bp} =========== Policy Training ===========")
 	
 	def _build_optimizer(self):
 		# Initialize optimizer
@@ -52,7 +65,7 @@ class ZOTrainer():
 		
 		average_reward = self.optimize_model(f_args)
 		
-		self.logger.info("Iteration {}: avg reward: {:.3f}, params: {}, epsilon: {}".format(iteration, average_reward, self.optimizer.params, self.optimizer.epsilon))
+		self.logger.info("BP: {}, Iteration {}: avg reward: {:.3f}, params: {}, epsilon: {}".format(self.bp, iteration, average_reward, self.optimizer.params, self.optimizer.epsilon))
 
 		writer.add_scalar("train_metric/average_reward", average_reward, iteration)
 		# need to generalize this for multiple body parts
@@ -61,39 +74,69 @@ class ZOTrainer():
 		#                    'tau': self.optimizer.params[1]}, iteration)
 		return average_reward
 
-	def train(self):
+	def train(self,p_id):
 		writer = SummaryWriter(self.policy_trainer.runs_path)
 		original_epsilon = self.optimizer.epsilon
 		best_params = self.optimizer.params
 
 		self.policy_trainer.model.eval()
 
-		self.logger.info(f"Original Epsilon: {original_epsilon}")
+		self.logger.info(f"BP: {self.bp}, Original Epsilon: {original_epsilon}")
 
-		val_loss = self.validate(0,writer)
-		best_val_reward = val_loss['avg_reward']
+		if p_id == 0:
+			val_loss = self.validate(0,writer)
+			best_val_reward = val_loss['avg_reward']
+		self.barrier.wait()
 
 		for iteration in tqdm(range(self.train_cfg['epochs'])):
+			# every iteration, read the most up to date parameters
+			with self.file_lock:
+				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+					policy = pickle.load(file)['current']
+					for bp in self.frozen_sensor_params:
+						self.frozen_sensor_params[bp] = policy[bp]
+
 			self.train_one_epoch(iteration, writer)
+
+			# wait until all threads updated parameters
+			# with self.file_lock:
+			# 	with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+			# 		policy = pickle.load(file)['current']
+			# 		self.logger.info(f"BP: {self.bp}, params: {policy}")
+			self.barrier.wait()
+
+			# then write the current bp updated parameter
+			with self.file_lock:
+				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+					policy = pickle.load(file)
+					policy['current'][self.bp] = self.optimizer.params
+				with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
+					pickle.dump(policy, file)
+
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
-				val_loss = self.validate(iteration, writer)
-				if val_loss['avg_reward'] >= best_val_reward:
-					self.logger.info(f"Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
-					best_params = self.optimizer.params
-					best_val_reward = val_loss['avg_reward']
-					# save params: load checkpoint, update, save checkpoint
-					with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
-						policy = pickle.load(file)
-					policy[self.bp] = best_params
-					with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
-						pickle.dump(policy, file)
+				# only one process needs to eval
+				if p_id == 0:
+					val_loss = self.validate(iteration, writer)
+					if val_loss['avg_reward'] >= best_val_reward:
+						self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
+						best_params = self.optimizer.params
+						best_val_reward = val_loss['avg_reward']
+
+						with self.file_lock:
+							# save params: load checkpoint, update, save checkpoint
+							with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+								policy = pickle.load(file)
+							policy['best'][self.bp] = best_params
+							with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
+								pickle.dump(policy, file)
+			self.barrier.wait()
 			
 			if (self.optimizer.epsilon <= original_epsilon * 1e-2).all():
 				self.logger.info(f"Stopping training as reached convergence with epsilon {self.optimizer.epsilon}")
 				self.logger.info(f"Parameters are {best_params}")
 				break
 
-		self.logger.info(f"best reward: {best_val_reward}")
+		# self.logger.info(f"BP: {self.bp}, best reward: {best_val_reward}")
 		return best_params
 			
 	def validate(self, iteration, writer):
@@ -108,10 +151,14 @@ class ZOTrainer():
 			'classifier': self.policy_trainer.model,
 			'train_mode':False
 		} 
-
 		reward, f1 = self.reward_function(self.optimizer.params,**f_args)
 
-		self.logger.info("Iteration {}: params: {}, val_policy_f1: {:.3f}".format(iteration, self.optimizer.params, f1))
+		self.logger.info("Body Part: {}, Iteration {}: params: {}, val_policy_f1: {:.3f}".format(self.bp, iteration, self.optimizer.params, f1))
+		
+		with self.file_lock:
+			with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+				policy = pickle.load(file)['current']
+				self.logger.info(f"policy: {policy}")
 
 		if writer is not None:
 			writer.add_scalar("val_metric/policy_f1", f1, iteration)
