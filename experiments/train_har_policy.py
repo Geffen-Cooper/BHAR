@@ -217,6 +217,7 @@ def train_LOOCV(**kwargs):
 				
 				# create a checkpoint, init sensor policies to opportunistic
 				policy = {'current': {bp: [0.,0.] for bp in kwargs['body_parts']},
+			  			  'best_rew': {bp: [0.,0.] for bp in kwargs['body_parts']},
 			  			  'best': {bp: [0.,0.] for bp in kwargs['body_parts']}}
 				
 				# create folder for policy checkpoint

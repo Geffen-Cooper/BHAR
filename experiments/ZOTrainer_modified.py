@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from functools import partial
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import numpy as np
 from experiments.zero_order_algos import signSGD, SGD, PatternSearch
 from utils.setup_funcs import PROJECT_ROOT
 import pickle
@@ -76,6 +77,38 @@ class ZOTrainer():
 		#                    'tau': self.optimizer.params[1]}, iteration)
 		return average_reward
 
+	def write_val(self,val):
+		with self.file_lock:
+			with open(self.ckpt_path, 'rb') as file:
+				policy = pickle.load(file)
+				policy['current'][self.bp] = (val,self.optimizer.params)
+			with open(self.ckpt_path, 'wb') as file:
+				pickle.dump(policy, file)
+	
+	def update_best_rew(self):
+		with self.file_lock:
+			with open(self.ckpt_path, 'rb') as file:
+				policy = pickle.load(file)
+			# which update was the best
+			vals = np.array([policy['current'][bp][0] for bp in policy['current'].keys()])
+			bps = list(policy['current'].keys())
+			best_bp = bps[np.argmax(vals)]
+			# update only these params
+			policy['best_rew'][best_bp] = policy['current'][best_bp][1]
+			with open(self.ckpt_path, 'wb') as file:
+				pickle.dump(policy, file)
+	
+	def update_policy(self):
+		with self.file_lock:
+			with open(self.ckpt_path, 'rb') as file:
+				policy = pickle.load(file)
+			# set current and frozen params
+			self.optimizer.params = torch.tensor(policy['best_rew'][self.bp])
+			for bp in policy['current'].keys():
+				if bp != self.bp:
+					self.frozen_sensor_params[bp] = policy['best_rew'][bp]
+
+
 	def train(self,p_id):
 		writer = SummaryWriter(self.policy_trainer.runs_path)
 		original_epsilon = self.optimizer.epsilon
@@ -85,51 +118,63 @@ class ZOTrainer():
 
 		self.logger.info(f"BP: {self.bp}, Original Epsilon: {original_epsilon}")
 		self.logger.info("Opportunistic")
-		if p_id == 2:
+		# only one process needs to validate from init
+		if p_id == 0:
 			val_loss = self.validate(0,writer)
 			best_val_reward = val_loss['avg_reward']
-		# wait for validatio to finish
+			best_val_f1 = val_loss['f1']
+		# wait for validation to finish
 		self.barrier.wait()
 
 		for iteration in tqdm(range(self.train_cfg['epochs'])):
 
-			self.train_one_epoch(iteration, writer)
+			avg_rew = self.train_one_epoch(iteration, writer)
 
-			# then write the current bp updated parameter
-			with self.file_lock:
-				with open(self.ckpt_path, 'rb') as file:
-					policy = pickle.load(file)
-					policy['current'][self.bp] = self.optimizer.params
-				with open(self.ckpt_path, 'wb') as file:
-					pickle.dump(policy, file)
+			# # then write the current bp updated parameter
+			# with self.file_lock:
+			# 	with open(self.ckpt_path, 'rb') as file:
+			# 		policy = pickle.load(file)
+			# 		policy['current'][self.bp] = self.optimizer.params
+			# 	with open(self.ckpt_path, 'wb') as file:
+			# 		pickle.dump(policy, file)
+			self.write_val(avg_rew)
 
 			# wait until all threads updated parameters to synchronize
 			# before reading the updated parameters
 			self.barrier.wait()
 
-			# now read the updated parameters
-			with self.file_lock:
-				with open(self.ckpt_path, 'rb') as file:
-					policy = pickle.load(file)['current']
-					self.logger.info(f"BP: {self.bp}, params: {policy}")
+			# # now read the updated parameters
+			# with self.file_lock:
+			# 	with open(self.ckpt_path, 'rb') as file:
+			# 		policy = pickle.load(file)['current']
+			# 		for bp in policy.keys():
+			# 			if bp != self.bp:
+			# 				self.frozen_sensor_params[bp] = policy[bp]
+			# 		self.logger.info(f"BP: {self.bp}, params: {policy}")
+			if p_id == 0:
+				self.update_best_rew()
+			self.barrier.wait()
+
+			self.update_policy()
+			self.barrier.wait()
 			
 
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
-				# only one process needs to eval
-				if p_id == 2:
+				if p_id == 0:
 					val_loss = self.validate(iteration, writer)
-					if val_loss['avg_reward'] >= best_val_reward:
-						self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
-						best_params = self.optimizer.params
-						best_val_reward = val_loss['avg_reward']
+					if val_loss['f1'] >= best_val_f1:
+						# self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
+						# best_params = self.optimizer.params
+						best_val_f1 = val_loss['f1']
 
 						with self.file_lock:
 							# save params: load checkpoint, update, save checkpoint
 							with open(self.ckpt_path, 'rb') as file:
 								policy = pickle.load(file)
-							policy['best'][self.bp] = best_params
+							policy['best'] = policy['best_rew']
 							with open(self.ckpt_path, 'wb') as file:
 								pickle.dump(policy, file)
+							self.logger.info(f"Saving new best parameters {policy['best']}, f1: {val_loss['f1']} > {best_val_f1} (reward: {val_loss['avg_reward']})")
 			# wait for validation to finish
 			self.barrier.wait()
 			
@@ -155,12 +200,7 @@ class ZOTrainer():
 		} 
 		reward, f1 = self.reward_function(self.optimizer.params,**f_args)
 
-		self.logger.info("Body Part: {}, Iteration {}: params: {}, val_policy_f1: {:.3f}\n".format(self.bp, iteration, self.optimizer.params, f1))
-		
-		with self.file_lock:
-			with open(self.ckpt_path, 'rb') as file:
-				policy = pickle.load(file)['current']
-				self.logger.info(f"policy: {policy}")
+		self.logger.info("Iteration: {}, val_policy_f1: {:.3f}\n".format(iteration, f1))
 
 		if writer is not None:
 			writer.add_scalar("val_metric/policy_f1", f1, iteration)
