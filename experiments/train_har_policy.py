@@ -14,7 +14,7 @@ from models.model_builder import model_builder, sparse_model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders, generate_activity_sequence
 from datasets.preprocess_raw_data import preprocess_DSADS, preprocess_RWHAR, preprocess_PAMAP2
 from experiments.train import train, validate
-from utils.setup_funcs import PROJECT_ROOT, init_logger, init_seeds
+from utils.setup_funcs import PROJECT_ROOT, MODEL_ROOT, DATA_ROOT, init_logger, init_seeds
 from utils.parse_results import get_results
 from energy_harvesting.energy_harvest import EnergyHarvester
 from energy_harvesting.harvesting_sensor import EnergyHarvestingSensor
@@ -137,14 +137,14 @@ def train_LOOCV(**kwargs):
 		kwargs['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
 
 		# create the dataset
-		preprocessed_path = os.path.join(kwargs['dataset_top_dir'], "preprocessed_data")
+		preprocessed_path = os.path.join(DATA_ROOT[kwargs['dataset']], "preprocessed_data")
 		if not os.path.isdir(preprocessed_path):
 			if kwargs['dataset'] == 'dsads':
-				preprocess_DSADS(kwargs['dataset_top_dir'])
+				preprocess_DSADS(DATA_ROOT[kwargs['dataset']])
 			elif kwargs['dataset'] == 'rwhar':
-				preprocess_RWHAR(kwargs['dataset_top_dir'])
+				preprocess_RWHAR(DATA_ROOT[kwargs['dataset']])
 			elif kwargs['dataset'] == 'pamap2':
-				preprocess_PAMAP2(kwargs['dataset_top_dir'])
+				preprocess_PAMAP2(DATA_ROOT[kwargs['dataset']])
 		kwargs['dataset_dir'] = preprocessed_path
 
 		kwargs['subjects'] = train_subjects
@@ -195,7 +195,7 @@ def train_LOOCV(**kwargs):
 		if kwargs['policy'] == 'conservative':
 			logger.info("Train policy ===========")
 			# if the policy is already trained, just load parameters
-			policy_ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",f"{logging_prefix}/policy_{test_subjects}_seed{seed}")+'.pkl'
+			policy_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/policy_{test_subjects}_seed{seed}")+'.pkl'
 			if os.path.exists(policy_ckpt_path):
 				logger.info("Policy Already Trained")
 				with open(policy_ckpt_path, 'rb') as file:
@@ -221,7 +221,7 @@ def train_LOOCV(**kwargs):
 			  			  'best': {bp: [0.,0.] for bp in kwargs['body_parts']}}
 				
 				# create folder for policy checkpoint
-				Path(os.path.join(PROJECT_ROOT,"saved_data/checkpoints",f"{logging_prefix}")).mkdir(parents=True, exist_ok=True)
+				Path(os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}")).mkdir(parents=True, exist_ok=True)
 				with open(policy_ckpt_path, 'wb') as file:
 					pickle.dump(policy, file)
 
@@ -344,7 +344,7 @@ def train_LOOCV(**kwargs):
 			train(**finetune_args)
 
 			# load the best one
-			finetuned_model_ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",finetune_args['train_logname']+".pth")
+			finetuned_model_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",finetune_args['train_logname']+".pth")
 			sparse_model.load_state_dict(torch.load(finetuned_model_ckpt_path)['model_state_dict'])
 
 		
@@ -399,9 +399,9 @@ def train_LOOCV(**kwargs):
 	kwargs['train_logname'] = os.path.join(logging_prefix,f"results_seed{seed}")
 	path_items = kwargs['train_logname'].split("/")
 	if  len(path_items) > 1:
-		Path(os.path.join(PROJECT_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+		Path(os.path.join(MODEL_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
 
-	with open(os.path.join(PROJECT_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
+	with open(os.path.join(MODEL_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
 		pickle.dump(results_table, file)
 
 if __name__ == '__main__':
@@ -419,7 +419,7 @@ if __name__ == '__main__':
 	args['logging_prefix'] = os.path.join(args['dataset'],args['architecture'],args['logging_prefix'])
 
 	if eval_only:
-		base_path = os.path.join(PROJECT_ROOT,"saved_data/results",args['logging_prefix'])
+		base_path = os.path.join(MODEL_ROOT,"saved_data/results",args['logging_prefix'])
 		result_logs = [os.path.join(base_path, filename) for filename in os.listdir(base_path)]
 		mean, std = get_results(result_logs)
 		print(f"Mean: {round(mean*100,3)}, std: {round(std*100,3)}")

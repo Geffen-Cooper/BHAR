@@ -8,7 +8,7 @@ from pathlib import Path
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 
-from utils.setup_funcs import PROJECT_ROOT
+from utils.setup_funcs import PROJECT_ROOT, MODEL_ROOT
 
 
 np.set_printoptions(linewidth=np.nan)
@@ -20,8 +20,8 @@ def train(model,loss_fn,optimizer,train_logname,epochs,ese,device,
     # start tensorboard session
     now = datetime.now()
     now = now.strftime("%Y-%m-%d_%H:%M:%S")
-    train_writer = SummaryWriter(os.path.join(PROJECT_ROOT,"saved_data/runs",train_logname)+"_train_"+now)
-    val_writer = SummaryWriter(os.path.join(PROJECT_ROOT,"saved_data/runs",train_logname)+"_val_"+now)
+    train_writer = SummaryWriter(os.path.join(MODEL_ROOT,"saved_data/runs",train_logname)+"_train_"+now)
+    val_writer = SummaryWriter(os.path.join(MODEL_ROOT,"saved_data/runs",train_logname)+"_val_"+now)
 
     # log training parameters
     print("===========================================")
@@ -38,10 +38,10 @@ def train(model,loss_fn,optimizer,train_logname,epochs,ese,device,
     num_epochs_worse = 0
 
     # creates directory to save checkpoint
-    checkpoint_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",train_logname) + ".pth"
+    checkpoint_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",train_logname) + ".pth"
     path_items = train_logname.split("/")
     if  len(path_items) > 1:
-        Path(os.path.join(PROJECT_ROOT,"saved_data/checkpoints",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+        Path(os.path.join(MODEL_ROOT,"saved_data/checkpoints",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
     
     best_val_f1 = 0.0
 

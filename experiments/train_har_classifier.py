@@ -11,7 +11,7 @@ from models.model_builder import model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders
 from datasets.preprocess_raw_data import preprocess_DSADS, preprocess_RWHAR, preprocess_PAMAP2
 from experiments.train import train, validate
-from utils.setup_funcs import PROJECT_ROOT, init_logger, init_seeds
+from utils.setup_funcs import PROJECT_ROOT, MODEL_ROOT, DATA_ROOT, init_logger, init_seeds
 from utils.parse_results import get_results
 
 def get_args():
@@ -92,14 +92,14 @@ def train_LOOCV(**kwargs):
 		logger.info(f"Train Group: {train_subjects} --> Test Group: {test_subjects}")
 
 		# create the dataset
-		preprocessed_path = os.path.join(kwargs['dataset_top_dir'], "preprocessed_data")
+		preprocessed_path = os.path.join(DATA_ROOT[kwargs['dataset']], "preprocessed_data")
 		if not os.path.isdir(preprocessed_path):
 			if kwargs['dataset'] == 'dsads':
-				preprocess_DSADS(kwargs['dataset_top_dir'])
+				preprocess_DSADS(DATA_ROOT[kwargs['dataset']])
 			elif kwargs['dataset'] == 'rwhar':
-				preprocess_RWHAR(kwargs['dataset_top_dir'])
+				preprocess_RWHAR(DATA_ROOT[kwargs['dataset']])
 			elif kwargs['dataset'] == 'pamap2':
-				preprocess_PAMAP2(kwargs['dataset_top_dir'])
+				preprocess_PAMAP2(DATA_ROOT[kwargs['dataset']])
 		kwargs['dataset_dir'] = preprocessed_path
 
 		train_loader,val_loader,test_loader = load_har_classifier_dataloaders(train_subjects, test_subjects, **kwargs)
@@ -122,7 +122,7 @@ def train_LOOCV(**kwargs):
 		kwargs['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(kwargs['optimizer'],kwargs['epochs'])
 
 		# load the model if already trained
-		ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",f"{kwargs['train_logname']}.pth")
+		ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",f"{kwargs['train_logname']}.pth")
 		if os.path.exists(ckpt_path):
 			model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
 		else:
@@ -142,9 +142,9 @@ def train_LOOCV(**kwargs):
 	kwargs['train_logname'] = os.path.join(logging_prefix,f"results_seed{seed}")
 	path_items = kwargs['train_logname'].split("/")
 	if  len(path_items) > 1:
-		Path(os.path.join(PROJECT_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+		Path(os.path.join(MODEL_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
 
-	with open(os.path.join(PROJECT_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
+	with open(os.path.join(MODEL_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
 		pickle.dump(results_table, file)
 
 if __name__ == '__main__':
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 	args['logging_prefix'] = os.path.join(args['dataset'],args['architecture'],args['logging_prefix'])
 
 	if eval_only:
-		base_path = os.path.join(PROJECT_ROOT,"saved_data/results",args['logging_prefix'])
+		base_path = os.path.join(MODEL_ROOT,"saved_data/results",args['logging_prefix'])
 		result_logs = [os.path.join(base_path, filename) for filename in os.listdir(base_path)]
 		mean, std = get_results(result_logs)
 		print(f"Mean: {round(mean*100,3)}, std: {round(std*100,3)}")
