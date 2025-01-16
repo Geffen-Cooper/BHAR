@@ -12,7 +12,7 @@ import pickle
 torch.set_printoptions(sci_mode=True)
 
 class ZOTrainer():
-	def __init__(self, optimizer_cfg, train_cfg, policy_trainer, reward_function, logger, training_bp, file_lock, barrier):
+	def __init__(self, optimizer_cfg, train_cfg, policy_trainer, reward_function, logger, training_bp, file_lock, barrier, ckpt_path):
 		self.optimizer_cfg = optimizer_cfg
 		self.train_cfg = train_cfg
 
@@ -26,10 +26,12 @@ class ZOTrainer():
 
 		self.bp = training_bp
 
+		self.ckpt_path = ckpt_path
+
 		# all other body parts are frozen parameters
 		with file_lock:
 			# save params: load checkpoint, update, save checkpoint
-			with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+			with open(self.ckpt_path, 'rb') as file:
 				policy = pickle.load(file)['current']
 				for bp in policy.keys():
 					if bp != self.bp:
@@ -86,33 +88,31 @@ class ZOTrainer():
 		if p_id == 2:
 			val_loss = self.validate(0,writer)
 			best_val_reward = val_loss['avg_reward']
+		# wait for validatio to finish
 		self.barrier.wait()
 
 		for iteration in tqdm(range(self.train_cfg['epochs'])):
 
 			self.train_one_epoch(iteration, writer)
 
-			# wait until all threads updated parameters
-			# with self.file_lock:
-			# 	with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
-			# 		policy = pickle.load(file)['current']
-			# 		self.logger.info(f"BP: {self.bp}, params: {policy}")
-			# self.barrier.wait()
-
 			# then write the current bp updated parameter
 			with self.file_lock:
-				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+				with open(self.ckpt_path, 'rb') as file:
 					policy = pickle.load(file)
 					policy['current'][self.bp] = self.optimizer.params
-				with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
+				with open(self.ckpt_path, 'wb') as file:
 					pickle.dump(policy, file)
 
-			# wait until all threads updated parameters
+			# wait until all threads updated parameters to synchronize
+			# before reading the updated parameters
+			self.barrier.wait()
+
+			# now read the updated parameters
 			with self.file_lock:
-				with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+				with open(self.ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['current']
 					self.logger.info(f"BP: {self.bp}, params: {policy}")
-			self.barrier.wait()
+			
 
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				# only one process needs to eval
@@ -125,11 +125,12 @@ class ZOTrainer():
 
 						with self.file_lock:
 							# save params: load checkpoint, update, save checkpoint
-							with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+							with open(self.ckpt_path, 'rb') as file:
 								policy = pickle.load(file)
 							policy['best'][self.bp] = best_params
-							with open(self.policy_trainer.checkpoint_path+'.pkl', 'wb') as file:
+							with open(self.ckpt_path, 'wb') as file:
 								pickle.dump(policy, file)
+			# wait for validation to finish
 			self.barrier.wait()
 			
 			if (self.optimizer.epsilon <= original_epsilon * 1e-2).all():
@@ -157,7 +158,7 @@ class ZOTrainer():
 		self.logger.info("Body Part: {}, Iteration {}: params: {}, val_policy_f1: {:.3f}\n".format(self.bp, iteration, self.optimizer.params, f1))
 		
 		with self.file_lock:
-			with open(self.policy_trainer.checkpoint_path+'.pkl', 'rb') as file:
+			with open(self.ckpt_path, 'rb') as file:
 				policy = pickle.load(file)['current']
 				self.logger.info(f"policy: {policy}")
 

@@ -38,7 +38,7 @@ class MultiSensorModel(nn.Module):
         # merge channels, then convert to float tensor with batch dimension
         packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float()
 
-        if len(packet_data.shape == 2): # no batch dimension
+        if len(packet_data.shape) == 2: # no batch dimension
             packet_data = packet_data.unsqueeze(0)
 
         return self.multisensor_model(packet_data)
@@ -105,7 +105,7 @@ class TemporalContextModel(nn.Module):
         # merge channels, then convert to float tensor
         packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float()
         age_data = torch.tensor(ages).float()
-        if len(packet_data.shape == 2): # no batch dimension
+        if len(packet_data.shape) == 2: # no batch dimension
             packet_data = packet_data.unsqueeze(0)
             age_data = age_data.unsqueeze(0)
         

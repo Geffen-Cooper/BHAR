@@ -27,7 +27,7 @@ for seed in "${seeds[@]}"; do
             --max_energy 200e-6 \
             --policy_batch_size 16 \
             --policy_lr 1e-6 50 \
-            --policy_epochs 5 \
+            --policy_epochs 10 \
             --policy_val_every_epochs 1 \
             --policy_param_init_vals 0. 0. \
             --policy_param_min_vals 0. 0. \

@@ -27,16 +27,11 @@ class PolicyTrain():
 		self.val_labels = val_labels
 		self.model = model
 
-		# path for checkpoint
-		self.checkpoint_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])
-		path_items = kwargs['train_logname'].split("/")
-		if  len(path_items) > 1:
-			Path(os.path.join(PROJECT_ROOT,"saved_data/checkpoints",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
-    
+		
 		# path for tensorboard
 		now = datetime.now()
 		now = now.strftime("%Y-%m-%d_%H:%M:%S")
-		self.runs_path = os.path.join(PROJECT_ROOT,"saved_data/runs",kwargs['train_logname'])+"_train_"+now
+		self.runs_path = os.path.join(PROJECT_ROOT,"saved_data/runs",kwargs['train_logname'])+"_policy_"+now
 
 		
 		# first split the data by bp

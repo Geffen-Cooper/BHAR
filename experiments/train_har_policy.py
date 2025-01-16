@@ -132,6 +132,8 @@ def train_LOOCV(**kwargs):
 		test_subjects = [subjects[subject_i]]
 
 		logger.info(f"Train Group: {train_subjects} --> Test Group: {test_subjects}")
+
+		# generic name of this log
 		kwargs['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
 
 		# create the dataset
@@ -193,10 +195,10 @@ def train_LOOCV(**kwargs):
 		if kwargs['policy'] == 'conservative':
 			logger.info("Train policy ===========")
 			# if the policy is already trained, just load parameters
-			ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])+'.pkl'
-			if os.path.exists(ckpt_path):
+			policy_ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",f"{logging_prefix}/policy_{test_subjects}_seed{seed}")+'.pkl'
+			if os.path.exists(policy_ckpt_path):
 				logger.info("Policy Already Trained")
-				with open(ckpt_path, 'rb') as file:
+				with open(policy_ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
 				logger.info(f"Policy: {policy}")
 				for bp in kwargs['body_parts'].keys():
@@ -216,7 +218,10 @@ def train_LOOCV(**kwargs):
 				# create a checkpoint, init sensor policies to opportunistic
 				policy = {'current': {bp: [0.,0.] for bp in kwargs['body_parts']},
 			  			  'best': {bp: [0.,0.] for bp in kwargs['body_parts']}}
-				with open(ckpt_path, 'wb') as file:
+				
+				# create folder for policy checkpoint
+				Path(os.path.join(PROJECT_ROOT,"saved_data/checkpoints",f"{logging_prefix}")).mkdir(parents=True, exist_ok=True)
+				with open(policy_ckpt_path, 'wb') as file:
 					pickle.dump(policy, file)
 
 				file_lock = multiprocessing.Lock()
@@ -250,7 +255,7 @@ def train_LOOCV(**kwargs):
 					logger.info(f"Training: {bp}, policy: {policy['current']}")
 
 					# train the policy for the given bp with others frozen
-					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,bp, file_lock, barrier)
+					zo_trainer = ZOTrainer(optimizer_cfg,train_cfg,train_helper,reward,logger,bp, file_lock, barrier, policy_ckpt_path)
 					zo_trainers.append(zo_trainer)
 					
 					# zo_trainer.train()
@@ -265,7 +270,7 @@ def train_LOOCV(**kwargs):
 					
 
 				# load trained policy
-				with open(ckpt_path, 'rb') as file:
+				with open(policy_ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
@@ -274,42 +279,51 @@ def train_LOOCV(**kwargs):
 			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
 			sparse_model,_ = sparse_model_builder(**kwargs)
 
-			# opportunistic or dense for all sensors
-			policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
+			# opportunistic or unconstrained for all sensors
+			if kwargs['policy'] == 'unconstrained':
+				stride = kwargs['unconstrained_stride']
+				policy = {bp: kwargs['policy']+f"_{stride}" for bp in kwargs['body_parts']}
+			elif kwargs['policy'] == 'opportunistic':
+				policy = {bp: kwargs['policy'] for bp in kwargs['body_parts']}
 
 
 		# ============= after getting policy, apply it to train, val, and test data
-		train_packet_idxs = {}
-		val_packet_idxs = {}
 		test_packet_idxs = {}
-		per_bp_data_train = {}
-		per_bp_data_val ={}
 		per_bp_data_test = {}
 		for bp in kwargs['body_parts']:
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
-			per_bp_data_train[bp] = normalized_train_data_sequence[:,bp_channels]
-			per_bp_data_val[bp] = normalized_val_data_sequence[:,bp_channels]
 			per_bp_data_test[bp] = normalized_test_data_sequence[:,bp_channels]
 			
-			train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
-			val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
 			test_packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
 		
-		train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
-		val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
 		test_ds = SparseHarDataset(per_bp_data_test, test_label_sequence, test_packet_idxs)
 
 
 		# if we want to train the model, then build data loaders
 		# any asynchronous_multisensor model needs to be finetuned
 		if "asynchronous_multisensor" in kwargs['model_type']:
+			train_packet_idxs = {}
+			val_packet_idxs = {}
+			per_bp_data_train = {}
+			per_bp_data_val ={}
+			for bp in kwargs['body_parts']:
+				bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
+				per_bp_data_train[bp] = normalized_train_data_sequence[:,bp_channels]
+				per_bp_data_val[bp] = normalized_val_data_sequence[:,bp_channels]
+				
+				train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
+				val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
+			
+			train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
+			val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
+				
 			train_loader = torch.utils.data.DataLoader(train_ds, batch_size=kwargs['finetune_batch_size'], shuffle=True, pin_memory=False,drop_last=True,num_workers=4)
 			val_loader = torch.utils.data.DataLoader(val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
 
 			# load the pretrained model
 			# this should return one of the asynchronous_multisensor models
 			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-			sparse_model, ckpt_path = sparse_model_builder(**kwargs)
+			sparse_model, _ = sparse_model_builder(**kwargs)
 			sparse_model.train()
 
 			# train it
@@ -319,7 +333,7 @@ def train_LOOCV(**kwargs):
 			finetune_args['model'] = sparse_model
 			finetune_args['loss_fn'] = nn.CrossEntropyLoss()
 			finetune_args['optimizer'] = torch.optim.Adam(sparse_model.parameters(),lr=kwargs['finetune_lr'])
-			finetune_args['train_logname'] = f"{logging_prefix}/{test_subjects}_seed{seed}"
+			finetune_args['train_logname'] = f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"
 			finetune_args['device'] = device
 			finetune_args['train_loader'] = train_loader
 			finetune_args['val_loader'] = val_loader
@@ -329,7 +343,8 @@ def train_LOOCV(**kwargs):
 			train(**finetune_args)
 
 			# load the best one
-			sparse_model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+			finetuned_model_ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",finetune_args['train_logname']+".pth")
+			sparse_model.load_state_dict(torch.load(finetuned_model_ckpt_path)['model_state_dict'])
 
 		
 		
