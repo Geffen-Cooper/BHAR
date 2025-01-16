@@ -45,7 +45,7 @@ class ZOTrainer():
 			'per_body_part_data_normalized': data_n,
 			'label_sequence': labels,
 			'harvesting_sensor': self.policy_trainer.harvesting_sensor,
-			'reward_type': 'accuracy',
+			'reward_type': 'active_region',
 			'classifier': self.policy_trainer.model,
 			'train_mode':True
 		} 
@@ -73,7 +73,7 @@ class ZOTrainer():
 		val_loss = self.validate(0,writer)
 		best_val_reward = val_loss['avg_reward']
 
-		for iteration in tqdm(range(self.train_cfg['epochs'])):
+		for iteration in tqdm(range(self.train_cfg['epochs']),desc="Epochs"):
 			self.train_one_epoch(iteration, writer)
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				val_loss = self.validate(iteration, writer)
@@ -104,7 +104,7 @@ class ZOTrainer():
 			'per_body_part_data_normalized': self.policy_trainer.per_bp_data_val_n,
 			'label_sequence': self.policy_trainer.val_labels,
 			'harvesting_sensor': self.policy_trainer.harvesting_sensor,
-			'reward_type': 'accuracy',
+			'reward_type': 'active_region',
 			'classifier': self.policy_trainer.model,
 			'train_mode':False
 		} 

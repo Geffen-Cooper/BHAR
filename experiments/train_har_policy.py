@@ -13,7 +13,7 @@ from models.model_builder import model_builder, sparse_model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders, generate_activity_sequence
 from datasets.preprocess_raw_data import preprocess_DSADS, preprocess_RWHAR, preprocess_PAMAP2
 from experiments.train import train, validate
-from utils.setup_funcs import PROJECT_ROOT, init_logger, init_seeds
+from utils.setup_funcs import MODEL_ROOT, init_logger, init_seeds
 from utils.parse_results import get_results
 from energy_harvesting.energy_harvest import EnergyHarvester
 from energy_harvesting.harvesting_sensor import EnergyHarvestingSensor
@@ -190,11 +190,11 @@ def train_LOOCV(**kwargs):
 		if 'conservative' in kwargs['policy']:
 			logger.info("Train policy ===========")
 			# if the policy is already trained, just load parameters
-			ckpt_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])+'.pkl'
+			ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",kwargs['train_logname'])+'.pkl'
 			if os.path.exists(ckpt_path):
 				logger.info("Policy Already Trained")
 				with open(ckpt_path, 'rb') as file:
-					policy = pickle.load(file)
+					policy = pickle.load(file) # TODO
 				logger.info(f"Policy: {policy}")
 
 			else: # otherwise, train the policy
@@ -260,7 +260,14 @@ def train_LOOCV(**kwargs):
 		for bp in kwargs['body_parts']:
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
-			packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
+			print("policy bp", bp, policy[bp])
+			if torch.is_tensor(policy[bp]):
+				arg1 = str(policy[bp][0].item())
+				arg2 = str(policy[bp][1].item())
+				policy_str = kwargs['policy'] + '_' + arg1 + '_' + arg2
+			else:
+				policy_str = kwargs['policy']
+			packet_idxs[bp] = ehs.sparsify_data(policy_str, test_data_sequence[:,bp_channels])
 		
 		sparse_har_dataset = SparseHarDataset(per_bp_data, test_label_sequence, packet_idxs)
 
@@ -279,7 +286,7 @@ def train_LOOCV(**kwargs):
 		last_pred = rand_initial_pred
 		last_packet_idx = 0
 		current_packet_idx = 0
-		for packet_i in tqdm(range(len(sparse_har_dataset))):
+		for packet_i in tqdm(range(len(sparse_har_dataset)),desc='Batch'):
 			packets, labels = sparse_har_dataset[packet_i]
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
@@ -310,9 +317,9 @@ def train_LOOCV(**kwargs):
 	kwargs['train_logname'] = os.path.join(logging_prefix,f"results_seed{seed}")
 	path_items = kwargs['train_logname'].split("/")
 	if  len(path_items) > 1:
-		Path(os.path.join(PROJECT_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+		Path(os.path.join(MODEL_ROOT,"saved_data/results",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
 
-	with open(os.path.join(PROJECT_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
+	with open(os.path.join(MODEL_ROOT,"saved_data/results",kwargs['train_logname']+".pickle"), 'wb') as file:
 		pickle.dump(results_table, file)
 
 if __name__ == '__main__':
@@ -326,7 +333,7 @@ if __name__ == '__main__':
 	args['logging_prefix'] = os.path.join(args['dataset'],args['architecture'],args['logging_prefix'])
 
 	if eval_only:
-		base_path = os.path.join(PROJECT_ROOT,"saved_data/results",args['logging_prefix'])
+		base_path = os.path.join(MODEL_ROOT,"saved_data/results",args['logging_prefix'])
 		result_logs = [os.path.join(base_path, filename) for filename in os.listdir(base_path)]
 		mean, std = get_results(result_logs)
 		print(f"Mean: {round(mean*100,3)}, std: {round(std*100,3)}")

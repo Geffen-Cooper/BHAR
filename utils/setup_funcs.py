@@ -9,11 +9,12 @@ from pathlib import Path
 
 # root of project is one directory above
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+MODEL_ROOT = os.path.abspath('/store/nt9637/BHAR')
 
 def init_logger(logname: str) -> logging.Logger:
     """ create a logger that outputs print statements to the console and a log file
 
-    The logfile is saved to: [PROJECT_ROOT]/saved_data/logs/logname_[date] [time].log
+    The logfile is saved to: [MODEL_ROOT]/saved_data/logs/logname_[date] [time].log
 
     Parameters
     ----------
@@ -32,12 +33,12 @@ def init_logger(logname: str) -> logging.Logger:
     # create parent directories if needed
     path_items = logname.split("/")
     if  len(path_items) > 1:
-        print(PROJECT_ROOT)
-        Path(os.path.join(PROJECT_ROOT,"saved_data/logs",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+        print(MODEL_ROOT)
+        Path(os.path.join(MODEL_ROOT,"saved_data/logs",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
 
     # set the file path
     logname = logname + "_" + datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-    fn = os.path.join(PROJECT_ROOT,"saved_data/logs",str(logname)+".log")
+    fn = os.path.join(MODEL_ROOT,"saved_data/logs",str(logname)+".log")
 
     logger=logging.getLogger()
 

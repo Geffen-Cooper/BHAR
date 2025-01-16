@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # navigate to directory to install datasets
-cd ~/Projects/data
+# cd ~/Projects/data
+cd ~/saved_data/data
 
 # install DSADS
 wget https://archive.ics.uci.edu/static/public/256/daily+and+sports+activities.zip

@@ -1,7 +1,7 @@
 #!/bin/bash
 cd ..
 
-seeds=(0 1 2)
+seeds=(2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
@@ -11,7 +11,7 @@ for seed in "${seeds[@]}"; do
             --architecture "$architecture" \
             --dataset rwhar \
             --seed "$seed" \
-            --dataset_top_dir ~/Projects/data/rwhar \
+            --dataset_top_dir ../../../../store/nt9637/BHAR/data/rwhar \
             --subjects 1 4 5 7 9 10 11 12 13 14 15 \
             --sensors acc \
             --body_parts chest forearm head shin thigh upperarm waist \

@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-from utils.setup_funcs import PROJECT_ROOT
+from utils.setup_funcs import MODEL_ROOT
 from datasets.sparse_data_utils import SparseHarDataset
 
 # this class should handle all the intermediate steps of getting the reward
@@ -28,15 +28,15 @@ class PolicyTrain():
 		self.model = model
 
 		# path for checkpoint
-		self.checkpoint_path = os.path.join(PROJECT_ROOT,"saved_data/checkpoints",kwargs['train_logname'])
+		self.checkpoint_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",kwargs['train_logname'])
 		path_items = kwargs['train_logname'].split("/")
 		if  len(path_items) > 1:
-			Path(os.path.join(PROJECT_ROOT,"saved_data/checkpoints",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
+			Path(os.path.join(MODEL_ROOT,"saved_data/checkpoints",*path_items[:-1])).mkdir(parents=True, exist_ok=True)
     
 		# path for tensorboard
 		now = datetime.now()
 		now = now.strftime("%Y-%m-%d_%H:%M:%S")
-		self.runs_path = os.path.join(PROJECT_ROOT,"saved_data/runs",kwargs['train_logname'])+"_train_"+now
+		self.runs_path = os.path.join(MODEL_ROOT,"saved_data/runs",kwargs['train_logname'])+"_train_"+now
 
 		
 		# first split the data by bp
@@ -85,6 +85,9 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 	if reward_type == "active_region":
 		active_idxs, passive_idxs = sparse_har_dataset.region_decomposition()
 		reward = len(active_idxs)/(len(active_idxs)+len(passive_idxs))
+
+		if not train_mode:
+			reward = (reward, 0.0) # TODO
 		
 	elif reward_type == "accuracy":
 		# next classify sparse data

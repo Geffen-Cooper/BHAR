@@ -8,7 +8,7 @@ import torch
 
 from models.Attend import AttendDiscriminate
 from models.ConvLstm import DeepConvLSTM
-from utils.setup_funcs import PROJECT_ROOT
+from utils.setup_funcs import PROJECT_ROOT, MODEL_ROOT
 from models.sparse_wrappers import DenseModel, MultiSensor, TemporalContextModel
 
 def model_builder(**kwargs):
@@ -51,8 +51,9 @@ def sparse_model_builder(**kwargs):
     if model_type == 'synchronous_multisensor':
         # this is standard HAR model
         model = model_builder(**kwargs)
-        ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
+        ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix'],kwargs['checkpoint_postfix'])
         model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.eval()
         return DenseModel(model)
          
     elif model_type == 'asynchronous_single_sensor':
@@ -62,8 +63,9 @@ def sparse_model_builder(**kwargs):
         for bp in all_body_parts:
             kwargs['body_parts'] = [bp]
             models[bp] = model_builder(**kwargs)
-            ckpt_path = os.path.join(PROJECT_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
+            ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
             models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+            models[bp].eval()
         return MultiSensor(models)
     elif model_type == 'asynchronous_multisensor_time_context':
         # this is standard HAR model

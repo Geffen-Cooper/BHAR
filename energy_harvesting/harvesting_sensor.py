@@ -90,7 +90,7 @@ class EnergyHarvestingSensor():
 		self.num_packets_sent = 0
 
 
-	def send_packet(self, k):
+	def send_packet(self, k, condition):
 		""" Alters the harvester state accordingly when want to send a packet.
 		If insufficient energy is available, the time index just increments
 
@@ -108,7 +108,7 @@ class EnergyHarvestingSensor():
 
 		"""
 		# Check if have sufficient energy to send
-		if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau):
+		if condition:
 			# we are within one packet of the end of the data
 			if k + self.packet_size + 1 >= len(self.e_trace):
 				self.valid[k+1:] = 1
@@ -177,6 +177,7 @@ class EnergyHarvestingSensor():
 			
 		elif "conservative" in policy:
 			args = policy.split("_")
+			print("POLICY", policy)
 			self.alpha, self.tau = float(args[1]), float(args[2])
 			# self.alpha = (50e-6)/10
 			# self.tau = 100
@@ -205,11 +206,17 @@ class EnergyHarvestingSensor():
 				return self.packet_idxs
 
 			elif policy == "opportunistic" or "conservative" in policy:
-				k = self.send_packet(k)
+				condition = lambda k : (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau)
+				k = self.send_packet(k, condition)
+			
+			elif "conservative2" in policy:
+				avg_power = self.e_harvest[k-self.packet_size : k] / self.packet_size
+				delay = self.tau * avg_power + self.alpha
+				condition = lambda k : (self.e_trace[k] >= self.thresh + self.MARGIN) and (k - self.last_send_idx >= delay)
+				k = self.send_packet(k, condition)
 
 		self.packet_idxs = self.obtain_packets()
 		return self.packet_idxs
-		
 
 if __name__ == '__main__':
 	eh = EnergyHarvester()

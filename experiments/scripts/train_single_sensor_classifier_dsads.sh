@@ -3,7 +3,8 @@ cd ..
 
 seeds=(0 1 2)
 architectures=("attend")
-bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
+# bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
+bodyparts=("left_leg")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
@@ -13,7 +14,7 @@ for seed in "${seeds[@]}"; do
               --architecture "$architecture" \
               --dataset dsads \
               --seed "$seed" \
-              --dataset_top_dir ~/Projects/data/dsads \
+              --dataset_top_dir ../../../../store/nt9637/BHAR/data/dsads/data \
               --subjects 1 2 3 4 5 6 7 8 \
               --sensors acc \
               --body_parts "$bp" \
