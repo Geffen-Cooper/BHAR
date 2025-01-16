@@ -1,10 +1,10 @@
 #!/bin/bash
 cd ..
 
-seeds=(0 1 2)
+seeds=(1)
 architectures=("attend")
-# bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
-bodyparts=("left_leg")
+bodyparts=("torso" "right_arm" "left_arm" "right_leg" "left_leg")
+bodyparts=("right_leg")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do

@@ -260,7 +260,6 @@ def train_LOOCV(**kwargs):
 		for bp in kwargs['body_parts']:
 			bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
 			per_bp_data[bp] = normalized_test_data_sequence[:,bp_channels]
-			print("policy bp", bp, policy[bp])
 			if torch.is_tensor(policy[bp]):
 				arg1 = str(policy[bp][0].item())
 				arg2 = str(policy[bp][1].item())
