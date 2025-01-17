@@ -167,6 +167,7 @@ class EnergyHarvestingSensor():
 		# initialize the energy harvesting parameters
 		self.init_harvester(data)
 		self.last_sent_idx = 0
+		self.avg_power = 0
 
 		# energy starts from 0 at time step 0 so simulate from timestep 1
 		k = 1

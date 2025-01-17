@@ -59,7 +59,11 @@ def train(model,loss_fn,optimizer,train_logname,epochs,ese,device,
                 break
 
             # generic batch processing
-            data,target = data.to(device),target.to(device)
+            if type(data) is dict:
+                # model will send data to device
+                target = target.to(device)
+            else:
+                data,target = data.to(device),target.to(device)
 
             # forward pass
             output = model(data)
@@ -145,11 +149,15 @@ def validate(model, val_loader, device, loss_fn):
         outputs = []
 
         for batch_idx, (data,target) in enumerate(tqdm(val_loader)):
-            # parse the batch and send to device
-            data,target = data.to(device),target.to(device)
+            # generic batch processing
+            if type(data) is dict:
+                # model will send data to device
+                target = target.to(device)
+            else:
+                data,target = data.to(device),target.to(device)
 
             # get model output
-            out = model(data.float())
+            out = model(data)
 
             # get the loss
             val_loss += loss_fn(out, target)

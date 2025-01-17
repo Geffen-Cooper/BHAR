@@ -2,8 +2,8 @@
 
 # relative path to where data is saved
 data_dir:
-  dsads: "~/Projects/data/dsads"
-  rwhar: "~/Projects/data/rwhar"
+  dsads: "/home/gc28692/Projects/data/dsads"
+  rwhar: "/home/gc28692/Projects/data/rwhar"
 
 # relative path to where models, logs, and checkpoints will be saved
 model_dir: "."

@@ -25,6 +25,7 @@ class MultiSensorModel(nn.Module):
         super(MultiSensorModel,self).__init__()
 
         self.multisensor_model = multisensor_model
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self,x):
         # fmerge the data across body parts
@@ -35,13 +36,15 @@ class MultiSensorModel(nn.Module):
         for bp,packet in x.items():
             packet_data.append(packet['data'])
         
-        # merge channels, then convert to float tensor with batch dimension
-        packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float()
+        # check if there is a batch dimension
+        if len(packet_data[0].shape) > 2:
+            # merge channels
+            packet_data = torch.tensor(np.concatenate(packet_data,axis=2)).float()
+        else:
+            # merge channels, then convert to float tensor with batch dimension
+            packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float().unsqueeze(0)
 
-        if len(packet_data.shape) == 2: # no batch dimension
-            packet_data = packet_data.unsqueeze(0)
-
-        return self.multisensor_model(packet_data)
+        return self.multisensor_model(packet_data.to(self.device))
 
 
 class SingleSensorModel(nn.Module):
@@ -90,6 +93,7 @@ class TemporalContextModel(nn.Module):
         super(TemporalContextModel,self).__init__()
 
         self.multisensor_model = multisensor_model
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def forward(self,x):
         # merge the data across body parts
@@ -101,13 +105,16 @@ class TemporalContextModel(nn.Module):
         for bp,packet in x.items():
             packet_data.append(packet['data'])
             ages.append(packet['age'])
-        
-        # merge channels, then convert to float tensor
-        packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float()
-        age_data = torch.tensor(ages).float()
-        if len(packet_data.shape) == 2: # no batch dimension
-            packet_data = packet_data.unsqueeze(0)
-            age_data = age_data.unsqueeze(0)
+
+        # check if there is a batch dimension
+        if len(packet_data[0].shape) > 2:
+            # merge channels
+            packet_data = torch.tensor(np.concatenate(packet_data,axis=2)).float()
+            age_data = torch.stack(ages).T.float()
+        else:
+            # merge channels, then convert to float tensor with batch dimension
+            packet_data = torch.tensor(np.concatenate(packet_data,axis=1)).float().unsqueeze(0)
+            age_data = torch.tensor(ages).float().unsqueeze(0)
         
         # then do forward
-        return self.multisensor_model(packet_data, age_data)
+        return self.multisensor_model(packet_data.to(self.device), age_data.to(self.device))

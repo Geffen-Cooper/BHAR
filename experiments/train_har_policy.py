@@ -201,7 +201,7 @@ def train_LOOCV(**kwargs):
 				with open(policy_ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
 				logger.info(f"Policy: {policy}")
-				for bp in kwargs['body_parts'].keys():
+				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 
 			else: # otherwise, train the policy
@@ -209,6 +209,8 @@ def train_LOOCV(**kwargs):
 				# this should return the asychronous_single_sensor model since
 				# we cannot use the pretrained multisensor models to evaluate the policy
 				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+				model_type = kwargs['model_type']
+				kwargs['model_type'] = 'asynchronous_single_sensor'
 				sparse_model,_ = sparse_model_builder(**kwargs)
 
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
@@ -275,6 +277,8 @@ def train_LOOCV(**kwargs):
 					policy = pickle.load(file)['best']
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
+
+				kwargs['model_type'] = model_type
 		else:
 			# load classifier to use for policy evaluation
 			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"

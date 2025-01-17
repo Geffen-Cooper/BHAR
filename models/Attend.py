@@ -111,7 +111,7 @@ class FeatureExtractor(nn.Module):
         # print(x.shape)
 
         if ages is not None:
-            temporal_context = self.t_context_layer(ages)
+            temporal_context = F.sigmoid(self.t_context_layer(ages))
             temporal_context = temporal_context.view(x.shape[0],self.window_size-2,-1).unsqueeze(1).repeat(1,x.shape[1],1,1)
             x = x * temporal_context
 

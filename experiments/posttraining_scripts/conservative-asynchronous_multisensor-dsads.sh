@@ -35,7 +35,7 @@ for seed in "${seeds[@]}"; do
             --policy_param_max_vals 1.5e-4 10000 \
             --finetune_batch_size 32 \
             --finetune_lr 1e-4 \
-            --finetune_epochs 5
+            --finetune_epochs 10
     done
 done
 
