@@ -34,7 +34,12 @@ class SparseHarDataset(Dataset):
         self.original_labels = original_labels
         self.packet_timestamps = packet_timestamps
         key = list(self.packet_timestamps.keys())[0]
-        self.packet_size = self.packet_timestamps[key][0][1] - self.packet_timestamps[key][0][0]
+        # TODO: pass in packet size as an arg, just don't want to go
+        # through all the calls of sparse dataset right now
+        if len(self.packet_timestamps[key]) == 0:
+            self.packet_size = 8
+        else:
+            self.packet_size = self.packet_timestamps[key][0][1] - self.packet_timestamps[key][0][0]
 
         # get the packet arrival points (end times)
         packet_arrival_times = {}

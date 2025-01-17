@@ -108,7 +108,8 @@ class EnergyHarvestingSensor():
 
 		"""
 		# Check if have sufficient energy to send
-		if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau):
+		# if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau):
+		if (self.e_trace[k] >= self.thresh + self.MARGIN) and (k - self.last_sent_idx >= self.tau):
 			# we are within one packet of the end of the data
 			if k + self.packet_size + 1 >= len(self.e_trace):
 				self.valid[k+1:] = 1
@@ -173,12 +174,12 @@ class EnergyHarvestingSensor():
 		k = 1
 
 		if policy == "opportunistic":
-			self.alpha = 0
-			self.tau = 0
+			self.theta = 0
+			self.bias = 0
 			
 		elif "conservative" in policy:
 			args = policy.split("_")
-			self.alpha, self.tau = float(args[1]), float(args[2])
+			self.theta, self.bias = float(args[1]), float(args[2])
 			# self.alpha = (50e-6)/10
 			# self.tau = 100
 
@@ -196,6 +197,10 @@ class EnergyHarvestingSensor():
 				self.e_trace[k] = 0
 				self.last_sent_idx = k # reset parameter
 				self.num_packets_sent = 0
+				self.avg_power = 0
+
+			self.avg_power = (sum(self.e_harvest[k-3*self.packet_size:k])/(3*self.packet_size))*10e6 # scale to uJ units
+			self.tau = self.theta*self.avg_power + self.bias
 
 			# this is a special case
 			if "unconstrained" in policy:
