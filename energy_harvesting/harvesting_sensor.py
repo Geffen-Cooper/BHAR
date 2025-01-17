@@ -173,6 +173,14 @@ class EnergyHarvestingSensor():
 		# energy starts from 0 at time step 0 so simulate from timestep 1
 		k = 1
 
+		# this is a special case
+		if "unconstrained" in policy:
+			stride = int(policy.split("_")[1])
+			start_idxs = np.arange(0,len(self.e_trace)-self.packet_size,stride)
+			end_idxs = start_idxs + self.packet_size
+			self.packet_idxs = np.stack([start_idxs, end_idxs]).T
+			return self.packet_idxs
+
 		if policy == "opportunistic":
 			self.theta = 0
 			self.bias = 0
@@ -202,15 +210,7 @@ class EnergyHarvestingSensor():
 			self.avg_power = (sum(self.e_harvest[k-3*self.packet_size:k])/(3*self.packet_size))*10e6 # scale to uJ units
 			self.tau = self.theta*self.avg_power + self.bias
 
-			# this is a special case
-			if "unconstrained" in policy:
-				stride = int(policy.split("_")[1])
-				start_idxs = np.arange(0,len(self.e_trace)-self.packet_size,stride)
-				end_idxs = start_idxs + self.packet_size
-				self.packet_idxs = np.stack([start_idxs, end_idxs]).T
-				return self.packet_idxs
-
-			elif policy == "opportunistic" or "conservative" in policy:
+			if policy == "opportunistic" or "conservative" in policy:
 				k = self.send_packet(k)
 
 		self.packet_idxs = self.obtain_packets()

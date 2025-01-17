@@ -21,11 +21,11 @@ class MultiSensorModel(nn.Module):
 			the model to wrap
 
 	"""
-    def __init__(self, multisensor_model):
+    def __init__(self, multisensor_model,device):
         super(MultiSensorModel,self).__init__()
 
         self.multisensor_model = multisensor_model
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
 
     def forward(self,x):
         # fmerge the data across body parts
@@ -60,10 +60,11 @@ class SingleSensorModel(nn.Module):
             the body part is the key
 
 	"""
-    def __init__(self, single_sensor_models):
+    def __init__(self, single_sensor_models,device):
         super(SingleSensorModel,self).__init__()
 
         self.single_sensor_models = single_sensor_models
+        self.device = device
 
     def forward(self,x):
         # find which body part got the latest packet
@@ -72,7 +73,7 @@ class SingleSensorModel(nn.Module):
             if packet['age'] == 0: # most recent arrival
                 # we only do inference with this model so need add batch dimension (no data loader)
                 packet_data = torch.tensor(packet['data']).float().unsqueeze(0)
-                return self.single_sensor_models[bp](packet_data)
+                return self.single_sensor_models[bp](packet_data.to(self.device))
 
 
 class TemporalContextModel(nn.Module):
@@ -89,11 +90,11 @@ class TemporalContextModel(nn.Module):
 			the model to wrap
 
 	"""
-    def __init__(self, multisensor_model):
+    def __init__(self, multisensor_model,device):
         super(TemporalContextModel,self).__init__()
 
         self.multisensor_model = multisensor_model
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
 
     def forward(self,x):
         # merge the data across body parts

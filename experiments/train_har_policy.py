@@ -124,6 +124,7 @@ def train_LOOCV(**kwargs):
 	init_seeds(seed)
 
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	kwargs['device'] = device
 
 	results_table = {subject: None for subject in subjects}
 
