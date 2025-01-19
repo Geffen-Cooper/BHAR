@@ -49,18 +49,20 @@ def sparse_model_builder(**kwargs):
     model_type = kwargs['model_type']
     device = kwargs['device']
 
-    if kwargs['policy'] == 'conservative':
-        device = 'cpu'
+    # # this breaks things
+    # if kwargs['policy'] == 'conservative':
+    #     device = 'cpu'
 
     if model_type == 'synchronous_multisensor':
         # this is standard HAR model
         model = model_builder(**kwargs).to(device)
         ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
-        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'],strict=False)
         model.eval()
         return MultiSensorModel(model,device), ckpt_path
          
     elif model_type == 'asynchronous_single_sensor':
+        # device = 'cpu'
         # this is multiple individual HAR models
         models = {}
         all_body_parts = kwargs['body_parts']
@@ -68,14 +70,14 @@ def sparse_model_builder(**kwargs):
             kwargs['body_parts'] = [bp]
             models[bp] = model_builder(**kwargs).to(device)
             ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['single_sensor_checkpoint_prefix']+f"_{bp}",kwargs['checkpoint_postfix'])
-            models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+            models[bp].load_state_dict(torch.load(ckpt_path)['model_state_dict'],strict=False)
             models[bp].eval()
         return SingleSensorModel(models,device), ckpt_path
     
     elif model_type == 'asynchronous_multisensor':
         model = model_builder(**kwargs).to(device)
         ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
-        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'],strict=False)
         model.eval()
         return MultiSensorModel(model,device), ckpt_path
 
@@ -83,5 +85,10 @@ def sparse_model_builder(**kwargs):
         # this is standard HAR model
         model = model_builder(**kwargs).to(device)
         ckpt_path = os.path.join(MODEL_ROOT,f"saved_data/checkpoints/",kwargs['multisensor_checkpoint_prefix'],kwargs['checkpoint_postfix'])
-        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'])
+        model.load_state_dict(torch.load(ckpt_path)['model_state_dict'],strict=False)
+        # if kwargs['architecture'] == 'attend':
+            # # freeze the convolutional stem
+            # for name,param in model.fe.named_parameters():
+            #     if 'conv' in name:
+            #         param.requires_grad = False
         return TemporalContextModel(model,device), ckpt_path

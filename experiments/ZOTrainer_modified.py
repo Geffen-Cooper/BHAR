@@ -54,6 +54,9 @@ class ZOTrainer():
 
 		# sample train segment
 		data, data_n, labels = self.policy_trainer.sample_train_segment(self.train_cfg['train_seg_duration'])
+		# bps = list(data.keys())
+		# plt.plot(data[bps[0]])
+		# plt.savefig("test.png")
 		
 		f_args = {
 			'frozen_sensor_params': self.frozen_sensor_params,
@@ -71,10 +74,6 @@ class ZOTrainer():
 		self.logger.info("BP: {}, Iteration {}: avg reward: {:.3f}, params: {}, epsilon: {}".format(self.bp, iteration, average_reward, self.optimizer.params, self.optimizer.epsilon))
 
 		writer.add_scalar("train_metric/average_reward", average_reward, iteration)
-		# need to generalize this for multiple body parts
-		# writer.add_scalars("train_metric/params", 
-		#                   {'alpha': self.optimizer.params[0],
-		#                    'tau': self.optimizer.params[1]}, iteration)
 		return average_reward
 
 	def write_val(self,val):
@@ -103,7 +102,13 @@ class ZOTrainer():
 			with open(self.ckpt_path, 'rb') as file:
 				policy = pickle.load(file)
 			# set current and frozen params
-			self.optimizer.params = torch.tensor(policy['best_rew'][self.bp])
+			# current params is either set to the best or reset to what it was on the last iteration
+			# which is what is saved in 'best_rew'
+			if isinstance(policy['best_rew'][self.bp], torch.Tensor):
+				self.optimizer.params = policy['best_rew'][self.bp]
+			else:
+				self.optimizer.params = torch.tensor(policy['best_rew'][self.bp])
+			# set all the frozen params to old/updated values
 			for bp in policy['current'].keys():
 				if bp != self.bp:
 					self.frozen_sensor_params[bp] = policy['best_rew'][bp]
@@ -128,33 +133,22 @@ class ZOTrainer():
 
 		for iteration in tqdm(range(self.train_cfg['epochs'])):
 
+			# let each sensor take a step
 			avg_rew = self.train_one_epoch(iteration, writer)
 
-			# # then write the current bp updated parameter
-			# with self.file_lock:
-			# 	with open(self.ckpt_path, 'rb') as file:
-			# 		policy = pickle.load(file)
-			# 		policy['current'][self.bp] = self.optimizer.params
-			# 	with open(self.ckpt_path, 'wb') as file:
-			# 		pickle.dump(policy, file)
+			# save the current parameters and avg reward on this step
 			self.write_val(avg_rew)
 
 			# wait until all threads updated parameters to synchronize
 			# before reading the updated parameters
 			self.barrier.wait()
 
-			# # now read the updated parameters
-			# with self.file_lock:
-			# 	with open(self.ckpt_path, 'rb') as file:
-			# 		policy = pickle.load(file)['current']
-			# 		for bp in policy.keys():
-			# 			if bp != self.bp:
-			# 				self.frozen_sensor_params[bp] = policy[bp]
-			# 		self.logger.info(f"BP: {self.bp}, params: {policy}")
+			# only one process needs to determine the best update
 			if p_id == 0:
 				self.update_best_rew()
 			self.barrier.wait()
 
+			# let all sensors (processes) update their policy
 			self.update_policy()
 			self.barrier.wait()
 			
@@ -162,7 +156,7 @@ class ZOTrainer():
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				if p_id == 0:
 					val_loss = self.validate(iteration, writer)
-					if val_loss['f1'] >= best_val_f1:
+					if val_loss['f1'] > best_val_f1 + .02:
 						# self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
 						# best_params = self.optimizer.params
 						best_val_f1 = val_loss['f1']

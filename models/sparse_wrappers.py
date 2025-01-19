@@ -63,7 +63,7 @@ class SingleSensorModel(nn.Module):
     def __init__(self, single_sensor_models,device):
         super(SingleSensorModel,self).__init__()
 
-        self.single_sensor_models = single_sensor_models
+        self.single_sensor_models = nn.ModuleDict(single_sensor_models)
         self.device = device
 
     def forward(self,x):

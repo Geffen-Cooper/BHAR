@@ -9,6 +9,7 @@ from pathlib import Path
 from tqdm import tqdm
 from sklearn.metrics import f1_score
 import multiprocessing
+import json
 
 from models.model_builder import model_builder, sparse_model_builder
 from datasets.dataset import HARClassifierDataset, load_har_classifier_dataloaders, generate_activity_sequence
@@ -69,7 +70,6 @@ def get_args():
 			required=True
 		)
 	parser.add_argument("--seed", default=0, type=int, help="seed for experiment, this must match the seeds used when training the classifier", required=True)
-	parser.add_argument("--dataset_top_dir", default="~/Projects/data/dsads", type=str, help="path to dataset", required=True)
 	parser.add_argument('--subjects', default=[1,2,3,4,5,6,7], nargs='+', type=int, help='List of subjects', required = True)
 	parser.add_argument('--sensors', default=["acc"], nargs='+', type=str, help='List of sensors', required=True)
 	parser.add_argument('--body_parts',default=["torso","right_arm","left_arm","right_leg","left_leg"], nargs='+', type=str, help='List of body parts', required=True)
@@ -123,6 +123,8 @@ def train_LOOCV(**kwargs):
 	logger = init_logger(f"{logging_prefix}/train_log_seed{seed}")
 	init_seeds(seed)
 
+	logger.info(json.dumps(kwargs,indent=4))
+
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	kwargs['device'] = device
 
@@ -173,6 +175,7 @@ def train_LOOCV(**kwargs):
 		# first generate the activity sequence (train, val, test)
 		min_dur = 10
 		max_dur = 30
+		np.random.seed(seed)
 		train_data_sequence, train_label_sequence = generate_activity_sequence(train_data,train_labels,min_dur,max_dur,kwargs['sampling_frequency'])
 		val_data_sequence, val_label_sequence = generate_activity_sequence(val_data,val_labels,min_dur,max_dur,kwargs['sampling_frequency'])
 		test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,kwargs['sampling_frequency'])
@@ -197,6 +200,7 @@ def train_LOOCV(**kwargs):
 			logger.info("Train policy ===========")
 			# if the policy is already trained, just load parameters
 			policy_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/policy_{test_subjects}_seed{seed}")+'.pkl'
+			policy_ckpt_path2 = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{os.path.dirname(logging_prefix)}/conservative-asynchronous_single_sensor/policy_{test_subjects}_seed{seed}")+'.pkl'
 			if os.path.exists(policy_ckpt_path):
 				logger.info("Policy Already Trained")
 				with open(policy_ckpt_path, 'rb') as file:
@@ -204,7 +208,13 @@ def train_LOOCV(**kwargs):
 				logger.info(f"Policy: {policy}")
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
-
+			elif os.path.exists(policy_ckpt_path2):
+				logger.info("Policy Already Trained")
+				with open(policy_ckpt_path2, 'rb') as file:
+					policy = pickle.load(file)['best']
+				logger.info(f"Policy: {policy}")
+				for bp in kwargs['body_parts']:
+					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 			else: # otherwise, train the policy
 				# load trained classifier to use for policy evaluation
 				# this should return the asychronous_single_sensor model since
@@ -218,8 +228,8 @@ def train_LOOCV(**kwargs):
 									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
 									val_label_sequence,sensor_channel_map,sparse_model,**kwargs)
 				
-				# create a checkpoint, init sensor policies to opportunistic
-				policy = {'current': {bp: [0.,0.] for bp in kwargs['body_parts']},
+				# create a checkpoint, init sensor policies
+				policy = {'current': {bp: kwargs['policy_param_init_vals'] for bp in kwargs['body_parts']},
 			  			  'best_rew': {bp: [0.,0.] for bp in kwargs['body_parts']},
 			  			  'best': {bp: [0.,0.] for bp in kwargs['body_parts']}}
 				
@@ -264,15 +274,21 @@ def train_LOOCV(**kwargs):
 					
 					# zo_trainer.train()
 
+				# bps 1->n-1 in other processes
 				for i, bp in enumerate(kwargs['body_parts']):
+					# skip 0, let main run 0
+					if i == 0:
+						continue
 					p = multiprocessing.Process(target=zo_trainers[i].train,args=(i,))
 					processes.append(p)
 					p.start()
+				
+				# bp 0 in main process
+				zo_trainers[0].train(0)
 
 				for p in processes:
 					p.join()
 					
-
 				# load trained policy
 				with open(policy_ckpt_path, 'rb') as file:
 					policy = pickle.load(file)['best']
@@ -302,12 +318,13 @@ def train_LOOCV(**kwargs):
 			
 			test_packet_idxs[bp] = ehs.sparsify_data(policy[bp], test_data_sequence[:,bp_channels])
 		
-		test_ds = SparseHarDataset(per_bp_data_test, test_label_sequence, test_packet_idxs)
+		sparse_test_ds = SparseHarDataset(per_bp_data_test, test_label_sequence, test_packet_idxs)
 
 
 		# if we want to train the model, then build data loaders
 		# any asynchronous_multisensor model needs to be finetuned
 		if "asynchronous_multisensor" in kwargs['model_type']:
+			#TODO: check if model already trained
 			train_packet_idxs = {}
 			val_packet_idxs = {}
 			per_bp_data_train = {}
@@ -320,11 +337,18 @@ def train_LOOCV(**kwargs):
 				train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
 				val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
 			
-			train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
-			val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
-				
-			train_loader = torch.utils.data.DataLoader(train_ds, batch_size=kwargs['finetune_batch_size'], shuffle=True, pin_memory=False,drop_last=True,num_workers=4)
-			val_loader = torch.utils.data.DataLoader(val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
+			sparse_train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
+			sparse_val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
+
+			# create a weighted random sampler
+			train_class_counts = np.bincount(sparse_train_ds.labels)
+			train_class_weights = 1./train_class_counts
+			train_sample_weights = np.array([train_class_weights[c] for c in sparse_train_ds.labels])
+
+			train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights=train_sample_weights, num_samples=len(train_sample_weights))
+
+			train_loader = torch.utils.data.DataLoader(sparse_train_ds, batch_size=kwargs['finetune_batch_size'], pin_memory=False,drop_last=True,num_workers=4,sampler=train_sampler)
+			val_loader = torch.utils.data.DataLoader(sparse_val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
 
 			# load the pretrained model
 			# this should return one of the asynchronous_multisensor models
@@ -357,7 +381,7 @@ def train_LOOCV(**kwargs):
 		# ======================= test ==============================
 		sparse_model.eval()
 
-		active_idxs, passive_idxs = test_ds.region_decomposition()
+		active_idxs, passive_idxs = sparse_test_ds.region_decomposition()
 		# print(f"Active: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
 		# print(f"Passive: {len(passive_idxs)/(len(active_idxs)+len(passive_idxs))}")
 
@@ -367,11 +391,13 @@ def train_LOOCV(**kwargs):
 		last_pred = rand_initial_pred
 		last_packet_idx = 0
 		current_packet_idx = 0
-		for packet_i in tqdm(range(len(test_ds))):
-			packets, labels = test_ds[packet_i]
+		sent_idxs = []
+		for packet_i in tqdm(range(len(sparse_test_ds))):
+			packets, labels = sparse_test_ds[packet_i]
 			for bp,packet in packets.items():
 				if packet['age'] == 0: # most recent arrival
 					at = packet['arrival_time']
+					sent_idxs.append(at)
 					break
 			# predictions hold until this new packet
 			current_packet_idx = at
@@ -387,6 +413,8 @@ def train_LOOCV(**kwargs):
 
 		test_acc = (preds == test_label_sequence).mean()
 		test_f1 = f1_score(test_label_sequence,preds,average='macro')
+
+		
 		
 		logger.info(f"Test F1: {test_f1}, Test Acc: {test_acc}")
 		active_region = len(active_idxs)/(len(active_idxs)+len(passive_idxs))
@@ -394,9 +422,23 @@ def train_LOOCV(**kwargs):
 		passive_region = len(passive_idxs)/(len(active_idxs)+len(passive_idxs))
 		passive_error = 1-(preds[passive_idxs] == test_label_sequence[passive_idxs]).mean()
 		logger.info(f"Active Region: {round(active_region,3)}, Active Error: {round(active_error,3)} --> {round(active_region*active_error,3)} ")
-		logger.info(f"Passive Region: {round(passive_region,3)}, Passive Error: {round(passive_error,3)} --> {round(passive_region*passive_error,3)}")
+		logger.info(f"Passive Region: {round(passive_region,3)}, Passive Error: {round(passive_error,3)} --> {round(passive_region*passive_error,3)}\n")
+		
+		f1 = f1_score(test_label_sequence,preds,average=None)
+		sent_idxs = np.array(sent_idxs)
+		sp_l = test_label_sequence[sent_idxs]
+		for i,sc in enumerate(f1):
+			logger.info(f"{i}-{test_ds.selected_activity_label_map[i]}: {round(sc,3)}, frac: {round((sp_l==i).mean(),3)}")
 		logger.info("==========================================\n\n")
-		results_table[subject] = (test_f1, test_acc)
+
+		# print("********************* Plot ***************************")
+		# plt.plot(test_label_sequence,label='labels')
+		# plt.plot(preds,label='preds')
+		# plt.scatter(active_idxs,np.zeros_like(active_idxs),c='g',label='active')
+		# plt.scatter(passive_idxs,np.zeros_like(passive_idxs),c='r',label='passive')
+		# plt.scatter(sent_idxs,np.zeros_like(sent_idxs),c='k',label='arrivals')
+		# plt.show()
+		results_table[subject] = (test_f1, test_acc, active_region, passive_region, active_error, passive_error)
 
 
 	logger.info(f"Results: {results_table}")

@@ -14,7 +14,6 @@ for seed in "${seeds[@]}"; do
             --architecture "$architecture" \
             --dataset dsads \
             --seed "$seed" \
-            --dataset_top_dir ~/Projects/data/dsads \
             --subjects 1 2 3 4 5 6 7 8 \
             --sensors acc \
             --body_parts torso right_arm left_arm right_leg left_leg \

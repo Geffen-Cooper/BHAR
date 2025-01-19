@@ -100,6 +100,7 @@ class FeatureExtractor(nn.Module):
         # print(filter_num,input_dim)
 
         self.num_sensors, self.window_size = t_context
+        # self.context_layers = nn.ModuleList([nn.Linear(1,3*int(self.window_size-2)) for sensor in range(self.num_sensors)])
         self.t_context_layer = nn.Linear(self.num_sensors,self.num_sensors*3*int(self.window_size-2))
 
     def forward(self, x, ages=None):
@@ -112,6 +113,15 @@ class FeatureExtractor(nn.Module):
 
         if ages is not None:
             temporal_context = F.sigmoid(self.t_context_layer(ages))
+            # (B,1) -> (B,3*6) -> (B,6,3) -> (B,C,6,3) -> (B,C,6,15)
+            # contexts = []
+            # ages = F.normalize(ages) # along dimension 1
+            # for i,context_layer in enumerate(self.context_layers):
+            #     out = F.sigmoid(context_layer(ages[:,i].unsqueeze(0).T))
+            #     out = out.view(x.shape[0],x.shape[2],-1).unsqueeze(1).repeat(1,x.shape[1],1,1)
+            #     contexts.append(out)
+            # contexts = torch.cat(contexts,axis=3)
+            # x = x * contexts
             temporal_context = temporal_context.view(x.shape[0],self.window_size-2,-1).unsqueeze(1).repeat(1,x.shape[1],1,1)
             x = x * temporal_context
 
@@ -214,3 +224,6 @@ if __name__ == "__main__":
         print(f"\t logits: {logits.shape} {logits.dtype}")
 
         print(f"Num Params:{sum(p.numel() for p in model.parameters())}")
+
+    for name,param in model.fe.named_parameters():
+        print(name)

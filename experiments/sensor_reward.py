@@ -65,6 +65,7 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 
 	packet_idxs = {}
 	# apply the policy for each sensor using original data
+	traces = []
 	for bp in per_bp_data.keys():
 		# set the policy for frozen sensors
 		if bp in frozen_sensor_params.keys():
@@ -72,9 +73,34 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 		else: # policy for sensor we are optimizing
 			policy = f"conservative_{latest_params[0]}_{latest_params[1]}"
 		packet_idxs[bp] = harvesting_sensor.sparsify_data(policy, per_bp_data[bp])
+		traces.append(harvesting_sensor.e_trace)
+
+		# import matplotlib.pyplot as plt
+		# # plt.close()
+		# ax2 = plt.gca().twinx()
+		# ax2.plot(harvesting_sensor.e_trace)
+		# plt.savefig("test2.png")
+		# plt.scatter(active_idxs,np.zeros_like(active_idxs),c='g',label='active')
+		# plt.scatter(passive_idxs,np.zeros_like(passive_idxs),c='r',label='passive')
 
 	# format sparsified data (normalized)
+	# import matplotlib.pyplot as plt
 	sparse_har_dataset = SparseHarDataset(per_body_part_data_normalized, label_sequence, packet_idxs)
+	# plt.close()
+	# fig,ax = plt.subplots(1,1,figsize=(14,5))
+	# ax.plot(label_sequence)
+	# # ax.plot(per_bp_data[bp])
+	# bps = list(per_bp_data.keys())
+	# active_idxs,passive_idxs = sparse_har_dataset.region_decomposition()
+	# ax.scatter(active_idxs,np.zeros_like(active_idxs),c='g',label='active')
+	# ax.scatter(passive_idxs,np.zeros_like(passive_idxs),c='r',label='passive')
+	# # ax.scatter(sparse_har_dataset.unique_packet_timestamps[:,0],np.zeros_like(sparse_har_dataset.unique_packet_timestamps[:,0]),c='k',label='sent')
+	# ax.scatter(packet_idxs[bps[0]][:,0],np.zeros_like(packet_idxs[bps[0]][:,0]),c='k',label='sent')
+	# print(f"p:{policy}, a: {len(active_idxs)/(len(active_idxs)+len(passive_idxs))}")
+	# ax2 = plt.gca().twinx()
+	# ax2.plot(traces[0])
+	# ax.set_xlim([0,1500])
+	# plt.savefig(f'{policy}_{len(active_idxs)/(len(active_idxs)+len(passive_idxs))}.png')
 
 	# get reward from sparsified data
 	if reward_type == "active_region":

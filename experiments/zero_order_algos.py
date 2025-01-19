@@ -114,7 +114,7 @@ class signSGD(SGD):
 
 class PatternSearch(ZeroOrderOptimizer):
     """ Pattern Search Methods """
-    def __init__(self, init_params, epsilon, batch_size, f, params_bounds=None, theta=0.99, phi=1.01):
+    def __init__(self, init_params, epsilon, batch_size, f, params_bounds=None, theta=0.5, phi=1.5):
         # epsilon = 1e-6 # TODO
         super().__init__(init_params, epsilon, batch_size, f, params_bounds)
         self.rho = lambda t : t**(3/2) # TODO: try different ones
@@ -130,23 +130,26 @@ class PatternSearch(ZeroOrderOptimizer):
         delta_permutations = torch.nn.functional.normalize(delta_permutations, eps=1.0)
         current_eval = self.f(self.params, **f_args)
         evaluations = torch.zeros(delta_permutations.shape[0])
-        for _ in range(self.batch_size):
+        for b in range(self.batch_size):
             for k, delta in enumerate(delta_permutations):
                 if self._check_params_in_bounds(self.params + self.epsilon * delta):
                     param = self.params + self.epsilon * delta
-                    evaluations[k] += self.f(param, **f_args) / self.batch_size      
+                    evaluations[k] += self.f(param, **f_args) / self.batch_size 
+                    # print(f"{b}, {param}, {delta} -> {evaluations[k]}, {current_eval}")     
                 else:
                     evaluations[k] += 0
                 
         improved = False
         descent_directions = []
-        for y in evaluations:
-            if (y > current_eval - self.rho(self.epsilon)).all(): # if maximize
-                descent_directions.append(self.epsilon * delta_permutations[k])
+        for i,y in enumerate(evaluations):
+            if (y > current_eval).all(): # if maximize
+                descent_directions.append(self.epsilon * delta_permutations[i])
+                # print(f"++++ dir: {delta_permutations[i]}, {y} > {current_eval}, {current_eval - self.rho(self.epsilon)}")
                 improved = True
-        self.epsilon *= self.phi if improved else self.theta
+        self.epsilon *= self.phi if not improved else self.theta
 
         # Choose a random descent direction
+        # print(f"dirs: {descent_directions}")
         if improved and len(descent_directions) > 1:
             descent_direction = descent_directions[torch.randint(high=len(descent_directions), size=())]
         elif len(descent_directions) == 1:
@@ -165,7 +168,9 @@ class PatternSearch(ZeroOrderOptimizer):
         
     def forward(self, f_args):
         descent_direction = self.estimate_gradient_and_descent_direction(f_args)
-        self.params = self.point_update(descent_direction)        
+        op = self.params
+        self.params = self.point_update(descent_direction) 
+        # print(f"direction: {descent_direction}, {op} -> {self.params}")       
         updated_eval = self.f(self.params, **f_args)
             
         return updated_eval

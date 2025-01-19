@@ -80,11 +80,13 @@ class SparseHarDataset(Dataset):
         #                                'arrival_time': en}
         #     self.sparse_data.append(packet_data)
 
+        self.labels = self.original_labels[self.unique_packet_timestamps[:,1]].astype(int)
+
     def region_decomposition(self):
         active_idxs = []
         passive_idxs = []
 
-        self.sorted_arrival_times = np.stack(self.sorted_time_stamps,axis=0)[:,1]
+        self.sorted_arrival_times = np.stack(self.sorted_time_stamps,axis=0)[:,0]
 
         # get the activity transition points (include starting point idx 0)
         activity_transition_idxs = np.concatenate([np.array([0]),np.where(self.original_labels[:-1] != self.original_labels[1:])[0] + 1])

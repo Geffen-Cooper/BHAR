@@ -1,7 +1,7 @@
 #!/bin/bash
 cd ..
 
-seeds=(0)
+seeds=(0 1 2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
@@ -14,7 +14,6 @@ for seed in "${seeds[@]}"; do
             --architecture "$architecture" \
             --dataset rwhar \
             --seed "$seed" \
-            --dataset_top_dir ~/Projects/data/rwhar \
             --subjects 1 4 5 7 9 10 11 12 13 14 15 \
             --sensors acc \
             --body_parts chest forearm head shin thigh upperarm waist \
@@ -25,16 +24,9 @@ for seed in "${seeds[@]}"; do
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
-            --policy_batch_size 16 \
-            --policy_lr 1e-6 50 \
-            --policy_epochs 5 \
-            --policy_val_every_epochs 1 \
-            --policy_param_init_vals 0. 0. \
-            --policy_param_min_vals 0. 0. \
-            --policy_param_max_vals 1.5e-4 10000 \
             --finetune_batch_size 32 \
             --finetune_lr 1e-4 \
-            --finetune_epochs 5
+            --finetune_epochs 10
     done
 done
 

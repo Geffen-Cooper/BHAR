@@ -77,6 +77,12 @@ class EnergyHarvestingSensor():
 		# energy harvested each time step
 		self.e_harvest = np.concatenate([np.array([0]),np.diff(e_out)])
 
+		self.power_window = int(3*self.packet_size)
+		cs = np.cumsum(self.e_harvest)
+		window_sums = cs[self.power_window-1:] - np.concatenate(([0], cs[:-self.power_window]))
+		avg_powers = window_sums / self.power_window
+		self.max_p = np.max(avg_powers)
+
 		# energy level at each time step
 		self.e_trace = np.zeros(len(e_out))
 
@@ -110,6 +116,7 @@ class EnergyHarvestingSensor():
 		# Check if have sufficient energy to send
 		# if (self.e_trace[k] >= self.thresh + self.MARGIN + self.alpha) and (k - self.last_sent_idx >= self.tau):
 		if (self.e_trace[k] >= self.thresh + self.MARGIN) and (k - self.last_sent_idx >= self.tau):
+			# print(f"tau: {self.tau}, p: {self.avg_power},{self.p_n}, e: {self.e_trace[k]},{self.e_n}, params: {self.theta_power},{self.theta_energy}")
 			# we are within one packet of the end of the data
 			if k + self.packet_size + 1 >= len(self.e_trace):
 				self.valid[k+1:] = 1
@@ -125,6 +132,7 @@ class EnergyHarvestingSensor():
 				k += (self.packet_size+1)
 			self.last_sent_idx = k
 			self.num_packets_sent += 1
+			
 		else: # otherwise, move forward one time step
 			k += 1
 
@@ -146,11 +154,6 @@ class EnergyHarvestingSensor():
 		packet_idxs = np.stack([nan_to_num_transition_indices, num_to_nan_transition_indices]).T
 
 		self.valid = np.nan_to_num(self.valid, nan=0)
-		# plt.plot(self.e_trace[17000:18000])
-		# plt.plot(self.e_trace[15000:18000])
-		# plt.axhline(50e-6,c='k')
-		# plt.savefig(f"test_{np.random.randint(1000)}.png")
-		# plt.close()
 		return packet_idxs
 		
 
@@ -182,12 +185,12 @@ class EnergyHarvestingSensor():
 			return self.packet_idxs
 
 		if policy == "opportunistic":
-			self.theta = 0
-			self.bias = 0
+			self.theta_power = 0
+			self.theta_energy = 0
 			
 		elif "conservative" in policy:
 			args = policy.split("_")
-			self.theta, self.bias = float(args[1]), float(args[2])
+			self.theta_power, self.theta_energy = float(args[1]), float(args[2])
 			# self.alpha = (50e-6)/10
 			# self.tau = 100
 
@@ -207,8 +210,16 @@ class EnergyHarvestingSensor():
 				self.num_packets_sent = 0
 				self.avg_power = 0
 
-			self.avg_power = (sum(self.e_harvest[k-3*self.packet_size:k])/(3*self.packet_size))*10e6 # scale to uJ units
-			self.tau = self.theta*self.avg_power + self.bias
+			if "conservative" in policy:
+				self.avg_power = sum(self.e_harvest[k-self.power_window:k]) / self.power_window
+
+				# get normalized power and energy features in [0,1]
+				self.p_n = (self.avg_power - self.leakage) / (self.max_p - self.leakage)
+				self.e_n = (self.e_trace[k] - self.thresh) / (self.MAX_E - self.thresh)
+
+				self.tau = self.theta_power*self.p_n + self.theta_energy*self.e_n
+			else:
+				self.tau = 0
 
 			if policy == "opportunistic" or "conservative" in policy:
 				k = self.send_packet(k)

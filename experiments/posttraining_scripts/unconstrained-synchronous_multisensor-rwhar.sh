@@ -15,7 +15,6 @@ for seed in "${seeds[@]}"; do
             --architecture "$architecture" \
             --dataset rwhar \
             --seed "$seed" \
-            --dataset_top_dir ~/Projects/data/rwhar \
             --subjects 1 4 5 7 9 10 11 12 13 14 15 \
             --sensors acc \
             --body_parts chest forearm head shin thigh upperarm waist \
