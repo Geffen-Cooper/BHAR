@@ -1,14 +1,14 @@
 #!/bin/bash
 cd ..
 
-seeds=(0 1 2)
+seeds=(2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
     for architecture in "${architectures[@]}"; do
       python train_har_policy.py \
             --single_sensor_checkpoint_prefix single_sensor_classifier_window_8_acc \
-            --logging_prefix conservative-asynchronous_single_sensor \
+            --logging_prefix conservative-asynchronous_single_sensor_batch_2 \
             --policy conservative \
             --model_type asynchronous_single_sensor \
             --architecture "$architecture" \
@@ -24,7 +24,7 @@ for seed in "${seeds[@]}"; do
             --leakage 6.6e-6 \
             --sampling_frequency 25 \
             --max_energy 200e-6 \
-            --policy_batch_size 1 \
+            --policy_batch_size 2 \
             --policy_lr 20 20 \
             --policy_epochs 50 \
             --policy_val_every_epochs 10 \

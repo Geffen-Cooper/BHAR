@@ -61,12 +61,18 @@ class PolicyTrain():
 
 		return data_seg, data_seg_n, label_seg
 
-def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_normalized,label_sequence,harvesting_sensor,reward_type,classifier,train_mode):
+def reward(latest_params,batch_idx,frozen_sensor_params,per_bp_data,per_body_part_data_normalized,label_sequence,harvesting_sensor,reward_type,classifier,train_mode):
 
 	packet_idxs = {}
 	# apply the policy for each sensor using original data
 	traces = []
 	num_packets = 0
+	
+	if batch_idx is not None:
+		per_bp_data = per_bp_data[batch_idx]
+		per_body_part_data_normalized = per_body_part_data_normalized[batch_idx]
+		label_sequence = label_sequence[batch_idx]
+
 	for bp in per_bp_data.keys():
 		# set the policy for frozen sensors
 		if bp in frozen_sensor_params.keys():

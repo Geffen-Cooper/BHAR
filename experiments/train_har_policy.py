@@ -225,13 +225,13 @@ def train_LOOCV(**kwargs):
 				logger.info(f"Policy: {policy}")
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
-			elif os.path.exists(policy_ckpt_path2):
-				logger.info("Policy Already Trained")
-				with open(policy_ckpt_path2, 'rb') as file:
-					policy = pickle.load(file)['best']
-				logger.info(f"Policy: {policy}")
-				for bp in kwargs['body_parts']:
-					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
+			# elif os.path.exists(policy_ckpt_path2):
+			# 	logger.info("Policy Already Trained")
+			# 	with open(policy_ckpt_path2, 'rb') as file:
+			# 		policy = pickle.load(file)['best']
+			# 	logger.info(f"Policy: {policy}")
+			# 	for bp in kwargs['body_parts']:
+			# 		policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 			else: # otherwise, train the policy
 
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
@@ -335,7 +335,7 @@ def train_LOOCV(**kwargs):
 		# if we want to train the model, then build data loaders
 		# any asynchronous_multisensor model needs to be finetuned
 		if "asynchronous_multisensor" in kwargs['model_type']:
-			#TODO: check if model already trained
+			# check if model already trained
 			finetuned_model_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"+".pth")
 			if os.path.exists(finetuned_model_ckpt_path):
 				logger.info("Model already trained")

@@ -115,9 +115,8 @@ class signSGD(SGD):
 class PatternSearch(ZeroOrderOptimizer):
     """ Pattern Search Methods """
     def __init__(self, init_params, epsilon, batch_size, f, params_bounds=None, theta=0.5, phi=1.5):
-        # epsilon = 1e-6 # TODO
         super().__init__(init_params, epsilon, batch_size, f, params_bounds)
-        self.rho = lambda t : t**(3/2) # TODO: try different ones
+        self.rho = lambda t : 0.001 * t**(3/2) # TODO: try different ones
         self.theta = theta # contraction parameter
         self.phi = phi # expansion parameter
     
@@ -128,14 +127,14 @@ class PatternSearch(ZeroOrderOptimizer):
         num_params = len(self.params)
         delta_permutations = torch.tensor(list(product([-1,0,1], repeat=num_params)), dtype=torch.float32)
         delta_permutations = torch.nn.functional.normalize(delta_permutations, eps=1.0)
-        current_eval = self.f(self.params, **f_args)
+        current_eval = sum([self.f(self.params, b, **f_args) / self.batch_size for b in range(self.batch_size)])
         evaluations = torch.zeros(delta_permutations.shape[0])
         for b in range(self.batch_size):
             for k, delta in enumerate(delta_permutations):
                 if self._check_params_in_bounds(self.params + self.epsilon * delta):
                     param = self.params + self.epsilon * delta
-                    evaluations[k] += self.f(param, **f_args) / self.batch_size 
-                    # print(f"{b}, {param}, {delta} -> {evaluations[k]}, {current_eval}")     
+                    evaluations[k] += self.f(param, b, **f_args) / self.batch_size 
+                    # print(f"{b}, {param}, {delta} -> {evaluations[k]}")     
                 else:
                     evaluations[k] += 0
                 
@@ -143,21 +142,23 @@ class PatternSearch(ZeroOrderOptimizer):
         descent_directions = []
         for i,y in enumerate(evaluations):
             if (y > current_eval).all(): # if maximize
-                descent_directions.append(self.epsilon * delta_permutations[i])
-                # print(f"++++ dir: {delta_permutations[i]}, {y} > {current_eval}, {current_eval - self.rho(self.epsilon)}")
+                descent_directions.append((self.epsilon * delta_permutations[i], y))
+                # print(f"++++ dir: {delta_permutations[i]}, {y} > {current_eval}") 
+                print(f"eval {current_eval} rho {self.rho(self.epsilon)} eval+rho {current_eval + self.rho(self.epsilon)}")
                 improved = True
         self.epsilon *= self.phi if not improved else self.theta
 
         # Choose a random descent direction
         # print(f"dirs: {descent_directions}")
-        if improved and len(descent_directions) > 1:
-            descent_direction = descent_directions[torch.randint(high=len(descent_directions), size=())]
+        if improved and len(descent_directions) > 1: 
+            descent_direction, improved_eval = descent_directions[torch.randint(high=len(descent_directions), size=())]
         elif len(descent_directions) == 1:
-            descent_direction = descent_directions[0]
+            descent_direction, improved_eval = descent_directions[0]
         else:
             descent_direction = torch.zeros(num_params)
+            improved_eval = current_eval
         
-        return descent_direction
+        return descent_direction, improved_eval
 
     def point_update(self, descent_direction):
         if self._check_params_in_bounds(self.params + descent_direction):
@@ -167,10 +168,8 @@ class PatternSearch(ZeroOrderOptimizer):
             return self.params
         
     def forward(self, f_args):
-        descent_direction = self.estimate_gradient_and_descent_direction(f_args)
-        op = self.params
+        descent_direction, updated_eval= self.estimate_gradient_and_descent_direction(f_args)
+        # op = self.params
         self.params = self.point_update(descent_direction) 
         # print(f"direction: {descent_direction}, {op} -> {self.params}")       
-        updated_eval = self.f(self.params, **f_args)
-            
         return updated_eval

@@ -51,9 +51,12 @@ class ZOTrainer():
 		return self.optimizer.forward(*f_args)
 
 	def train_one_epoch(self, iteration, writer):
-
+		data = {}
+		data_n = {}
+		labels = {}
 		# sample train segment
-		data, data_n, labels = self.policy_trainer.sample_train_segment(self.train_cfg['train_seg_duration'])
+		for k in range(self.train_cfg['batch_size']):
+			data[k], data_n[k], labels[k] = self.policy_trainer.sample_train_segment(self.train_cfg['train_seg_duration'])
 		# bps = list(data.keys())
 		# plt.plot(data[bps[0]])
 		# plt.savefig("test.png")
@@ -191,6 +194,7 @@ class ZOTrainer():
 	def validate(self, iteration, writer):
 
 		f_args = {
+			'batch_idx': None,
 			'frozen_sensor_params': self.frozen_sensor_params,
 			'per_bp_data': self.policy_trainer.per_bp_data_val,
 			'per_body_part_data_normalized': self.policy_trainer.per_bp_data_val_n,
