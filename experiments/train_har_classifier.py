@@ -36,7 +36,6 @@ def get_args():
 			help="HAR dataset",
 		)
 	parser.add_argument("--seed", default=0, type=int, help="seed for experiment")
-	parser.add_argument("--dataset_top_dir", default="~/Projects/data/dsads", type=str, help="path to dataset")
 	parser.add_argument('--subjects', 
 						default=[1,2,3,4,5,6,7], nargs='+', type=int, help='List of subjects')
 	parser.add_argument('--sensors', 

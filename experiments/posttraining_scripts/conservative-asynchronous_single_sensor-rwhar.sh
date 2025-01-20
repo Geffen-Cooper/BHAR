@@ -1,7 +1,7 @@
 #!/bin/bash
 cd ..
 
-seeds=(0)
+seeds=(0 1 2)
 architectures=("attend")
 
 for seed in "${seeds[@]}"; do
@@ -25,9 +25,9 @@ for seed in "${seeds[@]}"; do
             --sampling_frequency 25 \
             --max_energy 200e-6 \
             --policy_batch_size 1 \
-            --policy_lr 10 10 \
-            --policy_epochs 10 \
-            --policy_val_every_epochs 1 \
+            --policy_lr 20 20 \
+            --policy_epochs 50 \
+            --policy_val_every_epochs 10 \
             --policy_param_init_vals 0. 0. \
             --policy_param_min_vals -1000 -1000 \
             --policy_param_max_vals 1000 1000

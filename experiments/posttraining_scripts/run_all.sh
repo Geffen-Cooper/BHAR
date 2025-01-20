@@ -24,5 +24,5 @@ output_file="timing_results.txt"
 { time ./conservative-asynchronous_multisensor-dsads.sh > /dev/null 2>&1; } 2>> log.txt
 { time ./conservative-asynchronous_multisensor-rwhar.sh > /dev/null 2>&1; } 2>> log.txt
 
-{ time ./conservative-asynchronous_multisensor_time_context-dsads. > /dev/null 2>&1; } 2>> log.txt
+{ time ./conservative-asynchronous_multisensor_time_context-dsads.sh > /dev/null 2>&1; } 2>> log.txt
 { time ./conservative-asynchronous_multisensor_time_context-rwhar.sh > /dev/null 2>&1; } 2>> log.txt

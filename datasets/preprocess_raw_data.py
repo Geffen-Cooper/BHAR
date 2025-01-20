@@ -411,9 +411,9 @@ def preprocess_RWHAR(dataset_dir: str) -> dict:
 		pickle.dump(dataset_info, file)
 
 def preprocess_PAMAP2(dataset_dir: str) -> dict:
-	""" Loads the RWHAR raw data and saves it in a standard format.
+	""" Loads the PAMAP raw data and saves it in a standard format.
 
-	http://wifo5-14.informatik.uni-mannheim.de/sensor/dataset/realworld2016/realworld2016_dataset
+	https://archive.ics.uci.edu/dataset/231/pamap2+physical+activity+monitoring
 
 	Each subject's data and labels will be saved as data_[subject].npy and labels_[subject].npy
 	in dataset_dir/preprocessed/. The data will have shape (N x C) where N is the number
@@ -480,6 +480,7 @@ def preprocess_PAMAP2(dataset_dir: str) -> dict:
 	for subject_i,subject_file in enumerate(subject_files):
 
 		data = pd.read_table(os.path.join(dataset_dir,subject_file), header=None, sep='\s+')
+		data = data.interpolate(method='linear', limit_direction='both')
 		data_array = data.values[:,active_columns[1:]]
 		label_array = data.values[:,active_columns[0]]
 
@@ -554,11 +555,246 @@ def preprocess_PAMAP2(dataset_dir: str) -> dict:
 		pickle.dump(dataset_info, file)
 	
 
-def preprocess_Opportunity():
-	pass
+def preprocess_Opportunity(dataset_dir: str) -> dict:
+	""" Loads the Opportunity raw data and saves it in a standard format.
+
+	https://archive.ics.uci.edu/dataset/226/opportunity+activity+recognition
+
+	Each subject's data and labels will be saved as data_[subject].npy and labels_[subject].npy
+	in dataset_dir/preprocessed/. The data will have shape (N x C) where N is the number
+	of raw samples per subject and C is the number of sensor channels.
+
+	Parameters
+	----------
+
+	dataset_dir: str
+		global path of where the dataset has been installed.
+
+
+	Returns
+	-------
+
+	dataset_info: dict
+		metadata about the raw data, specifically the 
+		sensor channel map, list of subjects, and label map
+	"""
+
+	body_parts = ["BACK",
+			  "RUA",
+			  "RLA",
+			  "LUA",
+			  "LLA",
+			  "L-SHOE",
+			  "R-SHOE"]
+
+	label_map = {0:"Null", 
+				1:"Stand", 
+				2:"Walk", 
+				3:"Sit", 
+				4:"Lie"
+				}
+
+	label_col = "Locomotion"
+	sensor = 'InertialMeasurementUnit'
+
+	upper_channel_list = ["accX",
+						"accY",
+						"accZ"]
+
+	foot_channel_list = ["Body_Ax",
+						"Body_Ay",
+						"Body_Az"]
+	
+	og_sampling_rate = 30
+	new_sampling_rate = 25
+
+	# there are 4 users
+	NUM_SUBJECTS = 4
+	subjects = [1,2,3,4]
+	# there are 5 normal runs and one drill run
+	NUM_RUNS = 6
+
+	# each user has 6 runs
+	runs = ["ADL1",
+			"ADL2",
+			"ADL3",
+			"ADL4",
+			"ADL5",
+			"Drill"]
+
+	def get_column_mapping():
+		'''
+		This function returns a nested dictionary that returns all the columns
+		and their corresponding sub items, e.g. InertialMeasurementUnit --> L-SHOE --> Body_Ax
+		'''
+		with open(os.path.join(dataset_dir,'column_names.txt'), 'r') as file:
+			text = file.read()
+
+		# Extract the strings between "Column:" and newline character or semicolon
+		pattern = r'Column:\s+(\S.*?)(?=\n|;|$)'
+		columns = re.findall(pattern, text)
+
+		# Split the extracted strings into lists of individual words
+		columns_list = [column.split() for column in columns]
+
+		ms_idx = 0
+		channel_idx_start = 1
+		channel_idx_end = 243
+		label_idx_start = 243
+
+		# The "MILLISEC" column
+		col_mapping_dict = {columns_list[ms_idx][1] : 0}
+
+		# The sensor channel columns
+		for col in columns_list[channel_idx_start:channel_idx_end]:
+			col_idx = int(col[0]) - 1 # e.g. 0
+			sensor = col[1] # e.g. "Accelerometer"
+			position = col[2] # e.g. "RKN^"
+			channel_type = col[3] # e.g. "accX" --> REED has an additional subchannel but we don't use REED so ignore
+
+			# check if created sensor sub_dict
+			if sensor not in col_mapping_dict.keys():
+				col_mapping_dict[sensor] = {position : {channel_type : col_idx} }
+			# check if created position sub_dict
+			if position not in col_mapping_dict[sensor].keys():
+				col_mapping_dict[sensor][position] = {channel_type : col_idx}
+			else:
+				col_mapping_dict[sensor][position][channel_type] = col_idx
+
+		# The label columns
+		for col in columns_list[label_idx_start:]:
+			col_idx = int(col[0]) - 1 # e.g. 0
+			label_level = col[1] # e.g. "Locomotion"
+			col_mapping_dict[label_level] = col_idx
+
+		return col_mapping_dict
+
+	# get the col idxs of desired channels
+	col_map_dict = get_column_mapping()
+	active_col_idxs = []
+	for bp in body_parts:
+		if bp == 'L-SHOE' or bp == 'R-SHOE':
+			channel_list = foot_channel_list
+		else:
+			channel_list = upper_channel_list
+		for ch in channel_list:
+			active_col_idxs.append(col_map_dict[sensor][bp][ch])
+	active_col_idxs.append(col_map_dict[label_col])
+	active_col_idxs = np.array(active_col_idxs)
+
+	# we separate the data by subject
+	training_data = {subject: [] for subject in range(NUM_SUBJECTS)} # raw data
+	training_labels = {subject: [] for subject in range(NUM_SUBJECTS)} # raw labels
+
+
+	# then load all the data
+	for subject_i,subject in enumerate(subjects):
+		for file_name in (runs):
+			subject_file = f"S{subject}-{file_name}.dat"
+			print(subject_file)
+			# load the data
+			data_file_path = os.path.join(dataset_dir,subject_file)
+			data_array = pd.read_csv(data_file_path, sep=' ', header=None).values
+
+			# only keep the accelerometer columns for the desired body parts
+			data_array = data_array[:,active_col_idxs]
+			
+			# remove rows with Nans
+			non_nan_rows = (np.isnan(data_array).sum(axis=1) == 0).nonzero()[0]
+			data_array = data_array[non_nan_rows]
+
+			# split data and labels
+			label_array = data_array[:,-1] # last columns
+			data_array = data_array[:,:-1] # drop last column
+
+			# map labels to be contiguous
+			if label_col != "Locomotion": 
+				label_array[label_array == 406516] = 1
+				label_array[label_array == 406517] = 2
+				label_array[label_array == 404516] = 3
+				label_array[label_array == 404517] = 4
+				label_array[label_array == 406520] = 5
+				label_array[label_array == 404520] = 6
+				label_array[label_array == 406505] = 7
+				label_array[label_array == 404505] = 8
+				label_array[label_array == 406519] = 9
+				label_array[label_array == 404519] = 10
+				label_array[label_array == 406511] = 11
+				label_array[label_array == 404511] = 12
+				label_array[label_array == 406508] = 13
+				label_array[label_array == 404508] = 14
+				label_array[label_array == 408512] = 15
+				label_array[label_array == 407521] = 16
+				label_array[label_array == 405506] = 17
+			else:
+				label_array[label_array == 4] = 3
+				label_array[label_array == 5] = 4
+
+
+			# convert data to m/s^2 from milli-g
+			data_array = data_array/1000*9.8
+
+			# resample data
+			resampling_factor = new_sampling_rate / og_sampling_rate
+			old_length = len(data_array[:,0])
+			new_length = int(old_length * resampling_factor)
+			data_array = resample(data_array, new_length,axis=0)
+
+			# resample labels
+			t_e = old_length/og_sampling_rate
+			t_old = np.linspace(0,t_e,old_length)
+			t_e = new_length/new_sampling_rate
+			t_new = np.linspace(0,t_e,new_length)
+			closest_idxs = find_closest_index(t_old,t_new)
+			label_array = label_array[closest_idxs]
+
+			# put into list
+			training_data[subject_i].append(data_array)
+			training_labels[subject_i].append(label_array)
+
+		training_data[subject_i] = np.concatenate(training_data[subject_i])
+		training_labels[subject_i] = np.concatenate(training_labels[subject_i])
+
+	output_folder = os.path.join(dataset_dir,"preprocessed_data")
+	os.makedirs(output_folder,exist_ok=True)
+
+	# now save data
+	for subject_i in range(NUM_SUBJECTS):
+	  
+		print(f"==== {subject_i} ====")
+		print(training_data[subject_i].shape)
+		print(training_labels[subject_i].shape)
+
+		np.save(os.path.join(output_folder,f"data_{subject_i+1}"),training_data[subject_i])
+		np.save(os.path.join(output_folder,f"labels_{subject_i+1}"),training_labels[subject_i])
+	
+	# ------------- dataset metadata -------------
+	sensors = ['acc']
+	sensor_dims = 3 # XYZ
+	channels_per_sensor = len(sensors)*sensor_dims
+
+	# dict to get index of sensor channel by bp and sensor
+	sensor_channel_map = {
+		bp: 
+		{
+			sensor: np.arange(bp_i*channels_per_sensor+sensor_i*sensor_dims,
+							bp_i*channels_per_sensor+sensor_i*sensor_dims+sensor_dims)
+					for sensor_i,sensor in enumerate(sensors)
+		} for bp_i,bp in enumerate(body_parts)
+	}
+	
+	dataset_info = {
+		'sensor_channel_map': sensor_channel_map,
+		'list_of_subjects': np.arange(NUM_SUBJECTS)+1,
+		'label_map': label_map
+	}
+	
+	with open(os.path.join(output_folder,"metadata.pickle"), 'wb') as file:
+		pickle.dump(dataset_info, file)
 
 
 if __name__ == '__main__':
 	# preprocess_DSADS(os.path.expanduser("~/Projects/data/dsads"))
 	# preprocess_RWHAR(os.path.expanduser("~/Projects/data/rwhar"))
-	preprocess_PAMAP2(os.path.expanduser("~/Projects/data/pamap2/"))
+	# preprocess_PAMAP2(os.path.expanduser("~/Projects/data/pamap2/"))
+	preprocess_Opportunity(os.path.expanduser("~/Projects/data/opportunity"))

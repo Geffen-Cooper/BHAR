@@ -173,12 +173,20 @@ def train_LOOCV(**kwargs):
 		# -------------------
 
 		# first generate the activity sequence (train, val, test)
-		min_dur = 10
-		max_dur = 30
-		np.random.seed(seed)
-		train_data_sequence, train_label_sequence = generate_activity_sequence(train_data,train_labels,min_dur,max_dur,kwargs['sampling_frequency'])
-		val_data_sequence, val_label_sequence = generate_activity_sequence(val_data,val_labels,min_dur,max_dur,kwargs['sampling_frequency'])
-		test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+		# the opportunity dataset is collected as sequence of activities so 
+		# we don't need to simulate a sequence of activities
+		if kwargs['dataset'] != "opportunity":
+			min_dur = 10
+			max_dur = 30
+			np.random.seed(seed)
+			train_data_sequence, train_label_sequence = generate_activity_sequence(train_data,train_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+			val_data_sequence, val_label_sequence = generate_activity_sequence(val_data,val_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+			test_data_sequence, test_label_sequence = generate_activity_sequence(test_data,test_labels,min_dur,max_dur,kwargs['sampling_frequency'])
+		else:
+			train_data_sequence, train_label_sequence = train_data,train_labels
+			val_data_sequence, val_label_sequence = val_data,val_labels
+			test_data_sequence, test_label_sequence = test_data,test_labels
+
 
 		# normalize data used for classification, unormalized used for energy harvesting
 		normalized_train_data_sequence = (train_data_sequence-train_ds.mean)/(train_ds.std + 1e-5)
@@ -198,6 +206,15 @@ def train_LOOCV(**kwargs):
 		# ================================== Learn or load the policy
 		if kwargs['policy'] == 'conservative':
 			logger.info("Train policy ===========")
+
+			# load trained classifier to use for policy evaluation
+			# this should return the asychronous_single_sensor model since
+			# we cannot use the pretrained multisensor models to evaluate the policy
+			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+			model_type = kwargs['model_type']
+			kwargs['model_type'] = 'asynchronous_single_sensor'
+			sparse_model,_ = sparse_model_builder(**kwargs)
+
 			# if the policy is already trained, just load parameters
 			policy_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/policy_{test_subjects}_seed{seed}")+'.pkl'
 			policy_ckpt_path2 = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{os.path.dirname(logging_prefix)}/conservative-asynchronous_single_sensor/policy_{test_subjects}_seed{seed}")+'.pkl'
@@ -216,13 +233,6 @@ def train_LOOCV(**kwargs):
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 			else: # otherwise, train the policy
-				# load trained classifier to use for policy evaluation
-				# this should return the asychronous_single_sensor model since
-				# we cannot use the pretrained multisensor models to evaluate the policy
-				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-				model_type = kwargs['model_type']
-				kwargs['model_type'] = 'asynchronous_single_sensor'
-				sparse_model,_ = sparse_model_builder(**kwargs)
 
 				train_helper = PolicyTrain(active_channels, ehs, train_data_sequence, normalized_train_data_sequence,
 									train_label_sequence, val_data_sequence, normalized_val_data_sequence,
@@ -258,7 +268,7 @@ def train_LOOCV(**kwargs):
 						'batch_size': kwargs['policy_batch_size'],
 						'epochs': kwargs['policy_epochs'],
 						'val_every_epochs': kwargs['policy_val_every_epochs'],
-						'train_seg_duration':200*kwargs['sampling_frequency']	
+						'train_seg_duration':100*kwargs['sampling_frequency']	
 					}
 					
 					# # load the current policy so we can get the frozen params
@@ -295,7 +305,8 @@ def train_LOOCV(**kwargs):
 				for bp in kwargs['body_parts']:
 					policy[bp] = f"conservative_{policy[bp][0]}_{policy[bp][1]}"
 
-				kwargs['model_type'] = model_type
+			# after get policy, reset model type back to original arg
+			kwargs['model_type'] = model_type
 		else:
 			# load classifier to use for policy evaluation
 			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
@@ -325,55 +336,61 @@ def train_LOOCV(**kwargs):
 		# any asynchronous_multisensor model needs to be finetuned
 		if "asynchronous_multisensor" in kwargs['model_type']:
 			#TODO: check if model already trained
-			train_packet_idxs = {}
-			val_packet_idxs = {}
-			per_bp_data_train = {}
-			per_bp_data_val ={}
-			for bp in kwargs['body_parts']:
-				bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
-				per_bp_data_train[bp] = normalized_train_data_sequence[:,bp_channels]
-				per_bp_data_val[bp] = normalized_val_data_sequence[:,bp_channels]
+			finetuned_model_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"+".pth")
+			if os.path.exists(finetuned_model_ckpt_path):
+				logger.info("Model already trained")
+				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+				sparse_model, _ = sparse_model_builder(**kwargs)
+			else:
+				train_packet_idxs = {}
+				val_packet_idxs = {}
+				per_bp_data_train = {}
+				per_bp_data_val ={}
+				for bp in kwargs['body_parts']:
+					bp_channels = np.where(np.isin(active_channels,sensor_channel_map[bp]['acc']))[0]
+					per_bp_data_train[bp] = normalized_train_data_sequence[:,bp_channels]
+					per_bp_data_val[bp] = normalized_val_data_sequence[:,bp_channels]
+					
+					train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
+					val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
 				
-				train_packet_idxs[bp] = ehs.sparsify_data(policy[bp], train_data_sequence[:,bp_channels])
-				val_packet_idxs[bp] = ehs.sparsify_data(policy[bp], val_data_sequence[:,bp_channels])
-			
-			sparse_train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
-			sparse_val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
+				sparse_train_ds = SparseHarDataset(per_bp_data_train, train_label_sequence, train_packet_idxs)
+				sparse_val_ds = SparseHarDataset(per_bp_data_val, val_label_sequence, val_packet_idxs)
 
-			# create a weighted random sampler
-			train_class_counts = np.bincount(sparse_train_ds.labels)
-			train_class_weights = 1./train_class_counts
-			train_sample_weights = np.array([train_class_weights[c] for c in sparse_train_ds.labels])
+				# create a weighted random sampler
+				train_class_counts = np.bincount(sparse_train_ds.labels)
+				train_class_weights = 1./train_class_counts
+				train_sample_weights = np.array([train_class_weights[c] for c in sparse_train_ds.labels])
 
-			train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights=train_sample_weights, num_samples=len(train_sample_weights))
+				train_sampler = torch.utils.data.sampler.WeightedRandomSampler(weights=train_sample_weights, num_samples=len(train_sample_weights))
 
-			train_loader = torch.utils.data.DataLoader(sparse_train_ds, batch_size=kwargs['finetune_batch_size'], pin_memory=False,drop_last=True,num_workers=4,sampler=train_sampler)
-			val_loader = torch.utils.data.DataLoader(sparse_val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
+				train_loader = torch.utils.data.DataLoader(sparse_train_ds, batch_size=kwargs['finetune_batch_size'], pin_memory=False,drop_last=True,num_workers=4,sampler=train_sampler)
+				val_loader = torch.utils.data.DataLoader(sparse_val_ds, batch_size=128, shuffle=False, pin_memory=False,drop_last=True,num_workers=4)
 
-			# load the pretrained model
-			# this should return one of the asynchronous_multisensor models
-			kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
-			sparse_model, _ = sparse_model_builder(**kwargs)
-			sparse_model.train()
+				# load the pretrained model
+				# this should return one of the asynchronous_multisensor models
+				kwargs['checkpoint_postfix'] = f"{test_subjects}_seed{seed}.pth"
+				sparse_model, _ = sparse_model_builder(**kwargs)
+				sparse_model.train()
 
-			# train it
-			finetune_args = {}
-			finetune_args['epochs'] = kwargs['finetune_epochs']
-			finetune_args['ese'] = finetune_args['epochs']
-			finetune_args['model'] = sparse_model
-			finetune_args['loss_fn'] = nn.CrossEntropyLoss()
-			finetune_args['optimizer'] = torch.optim.Adam(sparse_model.parameters(),lr=kwargs['finetune_lr'])
-			finetune_args['train_logname'] = f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"
-			finetune_args['device'] = device
-			finetune_args['train_loader'] = train_loader
-			finetune_args['val_loader'] = val_loader
-			finetune_args['logger'] = logger
-			finetune_args['log_freq'] = 200
-			finetune_args['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(finetune_args['optimizer'],kwargs['finetune_epochs'])
-			train(**finetune_args)
+				# train it
+				finetune_args = {}
+				finetune_args['epochs'] = kwargs['finetune_epochs']
+				finetune_args['ese'] = finetune_args['epochs']
+				finetune_args['model'] = sparse_model
+				finetune_args['loss_fn'] = nn.CrossEntropyLoss()
+				finetune_args['optimizer'] = torch.optim.Adam(sparse_model.parameters(),lr=kwargs['finetune_lr'])
+				finetune_args['train_logname'] = f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"
+				finetune_args['device'] = device
+				finetune_args['train_loader'] = train_loader
+				finetune_args['val_loader'] = val_loader
+				finetune_args['logger'] = logger
+				finetune_args['log_freq'] = 200
+				finetune_args['lr_scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(finetune_args['optimizer'],kwargs['finetune_epochs'])
+				train(**finetune_args)
 
 			# load the best one
-			finetuned_model_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",finetune_args['train_logname']+".pth")
+			finetuned_model_ckpt_path = os.path.join(MODEL_ROOT,"saved_data/checkpoints",f"{logging_prefix}/finetuned_classifier_{test_subjects}_seed{seed}"+".pth")
 			sparse_model.load_state_dict(torch.load(finetuned_model_ckpt_path)['model_state_dict'])
 
 		

@@ -66,6 +66,7 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 	packet_idxs = {}
 	# apply the policy for each sensor using original data
 	traces = []
+	num_packets = 0
 	for bp in per_bp_data.keys():
 		# set the policy for frozen sensors
 		if bp in frozen_sensor_params.keys():
@@ -73,6 +74,7 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 		else: # policy for sensor we are optimizing
 			policy = f"conservative_{latest_params[0]}_{latest_params[1]}"
 		packet_idxs[bp] = harvesting_sensor.sparsify_data(policy, per_bp_data[bp])
+		num_packets += len(packet_idxs[bp])
 		traces.append(harvesting_sensor.e_trace)
 
 		# import matplotlib.pyplot as plt
@@ -85,6 +87,10 @@ def reward(latest_params,frozen_sensor_params,per_bp_data,per_body_part_data_nor
 
 	# format sparsified data (normalized)
 	# import matplotlib.pyplot as plt
+
+	# zero active region
+	if num_packets == 0:
+		return 0
 	sparse_har_dataset = SparseHarDataset(per_body_part_data_normalized, label_sequence, packet_idxs)
 	# plt.close()
 	# fig,ax = plt.subplots(1,1,figsize=(14,5))

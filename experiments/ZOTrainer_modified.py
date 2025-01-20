@@ -96,6 +96,7 @@ class ZOTrainer():
 			policy['best_rew'][best_bp] = policy['current'][best_bp][1]
 			with open(self.ckpt_path, 'wb') as file:
 				pickle.dump(policy, file)
+			self.logger.info(f"Step - best bp: {best_bp}, policy: {policy['best_rew']}")
 	
 	def update_policy(self):
 		with self.file_lock:
@@ -112,6 +113,7 @@ class ZOTrainer():
 			for bp in policy['current'].keys():
 				if bp != self.bp:
 					self.frozen_sensor_params[bp] = policy['best_rew'][bp]
+			self.logger.info(f"synch: {self.optimizer.params},{self.frozen_sensor_params}")
 
 
 	def train(self,p_id):
@@ -156,10 +158,9 @@ class ZOTrainer():
 			if iteration % self.train_cfg['val_every_epochs'] == 0 and iteration > 0:
 				if p_id == 0:
 					val_loss = self.validate(iteration, writer)
-					if val_loss['f1'] > best_val_f1 + .02:
+					if val_loss['f1'] > best_val_f1:
 						# self.logger.info(f"BP: {self.bp}, Saving new best parameters {self.optimizer.params}, reward: {val_loss['avg_reward']} > {best_val_reward} (f1: {val_loss['f1']})")
 						# best_params = self.optimizer.params
-						best_val_f1 = val_loss['f1']
 
 						with self.file_lock:
 							# save params: load checkpoint, update, save checkpoint
@@ -169,6 +170,13 @@ class ZOTrainer():
 							with open(self.ckpt_path, 'wb') as file:
 								pickle.dump(policy, file)
 							self.logger.info(f"Saving new best parameters {policy['best']}, f1: {val_loss['f1']} > {best_val_f1} (reward: {val_loss['avg_reward']})")
+
+						best_val_f1 = val_loss['f1']
+					else:
+						with self.file_lock:
+							with open(self.ckpt_path, 'rb') as file:
+								policy = pickle.load(file)
+							self.logger.info(f"f1: {val_loss['f1']} < {best_val_f1}, {policy['best']}")
 			# wait for validation to finish
 			self.barrier.wait()
 			

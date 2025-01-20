@@ -13,14 +13,16 @@ def get_results(result_paths):
         # get result for each user
         subjects = results.keys()
         vals = results.values()
-        f1s = np.array([val[0] for val in vals])
-        results_list.append(f1s)
+        results = [np.array(val) for val in vals]
+        results = np.stack(results)
+        results_list.append(results)
     
     # stack across seeds
-    f1_table = np.stack(results_list)
-    subject_means = f1_table.mean(axis=1)
-    seed_std = subject_means.std()
+    results_table = np.stack(results_list)
+    subject_means = results_table.mean(axis=1)
+    seed_std = subject_means.std(axis=0)
     
-    return subject_means.mean(), seed_std
+    return subject_means.mean(axis=0), seed_std
+
 
     

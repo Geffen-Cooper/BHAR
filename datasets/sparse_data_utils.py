@@ -125,8 +125,14 @@ class SparseHarDataset(Dataset):
             # all active region
             active_idxs.append(np.arange(curr_packet_idx,next_packet_idx))
 
-        self.active_region = np.concatenate(active_idxs)
-        self.passive_region = np.concatenate(passive_idxs)
+        if len(active_idxs) > 0:
+            self.active_region = np.concatenate(active_idxs)
+        else:
+            self.active_region = np.array([])
+        if len(passive_idxs) > 0:
+            self.passive_region = np.concatenate(passive_idxs)
+        else:
+            self.passive_region = np.array([])
 
         return self.active_region, self.passive_region
 
